@@ -1,17 +1,16 @@
 import { recordAudit } from "@/lib/audit/service";
-import { getVehicleOrThrow } from "@/lib/data/repository";
-import { store } from "@/lib/data/store";
+import { getVehicleOrThrow, insertVehicleBlock } from "@/lib/data/repository";
 import type { Role } from "@/lib/types/domain";
 import type { BlockVehicleRequest } from "@/lib/types/contracts";
 import { ApiException } from "@/lib/utils/errors";
 import { newId } from "@/lib/utils/ids";
 
-export function blockVehicle(
+export async function blockVehicle(
   vehicleId: string,
   input: BlockVehicleRequest,
   actor: { userId: string; role: Role }
 ) {
-  const vehicle = getVehicleOrThrow(vehicleId);
+  const vehicle = await getVehicleOrThrow(vehicleId);
 
   const canManageAsPartner =
     actor.role === "partner_investor" && vehicle.owner_id === actor.userId;
@@ -39,8 +38,8 @@ export function blockVehicle(
     created_at: new Date().toISOString()
   };
 
-  store.vehicleBlocks.push(blockWindow);
-  recordAudit({
+  await insertVehicleBlock(blockWindow);
+  await recordAudit({
     actorId: actor.userId,
     actorRole: actor.role,
     action: "vehicle.block",
@@ -55,4 +54,3 @@ export function blockVehicle(
 
   return blockWindow;
 }
-

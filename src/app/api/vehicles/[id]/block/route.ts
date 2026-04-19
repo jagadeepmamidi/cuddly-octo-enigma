@@ -8,13 +8,12 @@ export async function POST(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const actor = requireActor(request, ["partner_investor", "admin"]);
+    const actor = await requireActor(request, ["partner_investor", "admin"]);
     const body = await parseJson<BlockVehicleRequest>(request);
     const { id } = await context.params;
-    const result = blockVehicle(id, body, actor);
+    const result = await blockVehicle(id, body, actor);
     return ok(result, 201);
   } catch (error) {
     return fromError(error);
   }
 }
-

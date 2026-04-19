@@ -20,8 +20,9 @@ function getSetuConfig() {
 
 export async function createDigilockerRequest() {
   const cfg = getSetuConfig();
+  const requestPath = process.env.SETU_DIGILOCKER_REQUEST_PATH ?? "/api/digilocker";
 
-  const response = await fetch(`${cfg.baseUrl}/api/digilocker`, {
+  const response = await fetch(`${cfg.baseUrl}${requestPath}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -45,3 +46,25 @@ export async function createDigilockerRequest() {
   return response.json();
 }
 
+export async function fetchDigilockerRequestStatus(requestId: string) {
+  const cfg = getSetuConfig();
+  const statusPath = process.env.SETU_DIGILOCKER_STATUS_PATH ?? `/api/digilocker/${requestId}`;
+  const response = await fetch(`${cfg.baseUrl}${statusPath}`, {
+    method: "GET",
+    headers: {
+      "x-client-id": cfg.clientId,
+      "x-client-secret": cfg.clientSecret,
+      "x-product-instance-id": cfg.productInstanceId
+    }
+  });
+
+  if (!response.ok) {
+    throw new ApiException(
+      502,
+      "setu_status_failed",
+      "Setu DigiLocker status fetch failed."
+    );
+  }
+
+  return response.json();
+}

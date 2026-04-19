@@ -16,8 +16,8 @@ const couponRules: Record<string, number> = {
   WEEKEND15: 0.15
 };
 
-export function computePricingQuote(input: QuoteRequest): PricingQuote {
-  const vehicle = getVehicleOrThrow(input.vehicle_id);
+export async function computePricingQuote(input: QuoteRequest): Promise<PricingQuote> {
+  const vehicle = await getVehicleOrThrow(input.vehicle_id);
   const bucket = input.duration_bucket;
   const count = input.duration_value;
 
@@ -86,4 +86,3 @@ export function computeCancellationBreakup(params: {
     refund_amount: refundAmount
   };
 }
-

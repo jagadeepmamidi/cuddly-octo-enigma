@@ -1,19 +1,15 @@
 import { recordAudit } from "@/lib/audit/service";
-import { getBookingOrThrow } from "@/lib/data/repository";
-import { store } from "@/lib/data/store";
+import { getBookingOrThrow, listBookings, updateBooking } from "@/lib/data/repository";
 import type { Role } from "@/lib/types/domain";
 import type { RejectBookingRequest } from "@/lib/types/contracts";
 import { assertCanTransition } from "@/lib/bookings/state-machine";
 import { ApiException } from "@/lib/utils/errors";
 
-export function listBookingsForAdmin(filters?: { status?: string }) {
-  if (!filters?.status) {
-    return store.bookings;
-  }
-  return store.bookings.filter((booking) => booking.status === filters.status);
+export async function listBookingsForAdmin(filters?: { status?: string }) {
+  return listBookings({ status: filters?.status });
 }
 
-export function rejectBooking(
+export async function rejectBooking(
   bookingId: string,
   input: RejectBookingRequest,
   actor: { userId: string; role: Role }
@@ -22,7 +18,7 @@ export function rejectBooking(
     throw new ApiException(403, "forbidden", "Only admin can reject bookings.");
   }
 
-  const booking = getBookingOrThrow(bookingId);
+  const booking = await getBookingOrThrow(bookingId);
   const rejectableFrom = new Set(["pending_kyc", "payment_pending", "confirmed"]);
   if (!rejectableFrom.has(booking.status)) {
     throw new ApiException(
@@ -33,11 +29,13 @@ export function rejectBooking(
   }
 
   assertCanTransition(booking.status, "cancelled", "admin.reject_booking");
-  booking.status = "cancelled";
-  booking.cancel_reason = input.reason;
-  booking.updated_at = new Date().toISOString();
+  const updated = await updateBooking(booking.id, {
+    status: "cancelled",
+    cancel_reason: input.reason,
+    updated_at: new Date().toISOString()
+  });
 
-  recordAudit({
+  await recordAudit({
     actorId: actor.userId,
     actorRole: actor.role,
     action: "admin.booking_reject",
@@ -48,5 +46,5 @@ export function rejectBooking(
     }
   });
 
-  return booking;
+  return updated;
 }

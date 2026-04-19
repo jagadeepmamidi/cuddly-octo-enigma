@@ -6,7 +6,7 @@ import { ApiException } from "@/lib/utils/errors";
 
 export async function POST(request: Request) {
   try {
-    const actor = requireActor(request, ["customer", "admin"]);
+    const actor = await requireActor(request, ["customer", "admin"]);
     const body = await parseJson<KycStartRequest>(request);
 
     if (actor.role === "customer" && actor.userId !== body.user_id) {
@@ -17,10 +17,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = startDigilockerKyc(body.user_id);
+    const result = await startDigilockerKyc(body.user_id);
     return ok(result, 201);
   } catch (error) {
     return fromError(error);
   }
 }
-

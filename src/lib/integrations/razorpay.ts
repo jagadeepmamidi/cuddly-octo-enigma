@@ -1,11 +1,19 @@
 import crypto from "crypto";
 import { ApiException } from "@/lib/utils/errors";
 
-export function createRazorpayOrder(params: {
+export async function createRazorpayOrder(params: {
   amountInPaise: number;
   currency?: "INR";
   receipt: string;
-}) {
+}): Promise<{
+  provider: "razorpay";
+  key_id: string;
+  order_id: string;
+  amount: number;
+  currency: "INR";
+  receipt: string;
+  status: string;
+}> {
   const keyId = process.env.RAZORPAY_KEY_ID;
   const keySecret = process.env.RAZORPAY_KEY_SECRET;
   if (!keyId || !keySecret) {
@@ -16,16 +24,44 @@ export function createRazorpayOrder(params: {
     );
   }
 
-  // Integration boundary:
-  // Replace with live Razorpay Orders API call.
+  const authHeader = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
+  const response = await fetch("https://api.razorpay.com/v1/orders", {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${authHeader}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      amount: params.amountInPaise,
+      currency: params.currency ?? "INR",
+      receipt: params.receipt,
+      notes: {
+        platform: "rbabikerentals"
+      }
+    })
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new ApiException(502, "razorpay_order_create_failed", text);
+  }
+
+  const order = (await response.json()) as {
+    id: string;
+    amount: number;
+    currency: "INR";
+    receipt: string;
+    status: string;
+  };
+
   return {
-    provider: "razorpay",
+    provider: "razorpay" as const,
     key_id: keyId,
-    order_id: `order_${crypto.randomUUID().slice(0, 12)}`,
-    amount: params.amountInPaise,
-    currency: params.currency ?? "INR",
-    receipt: params.receipt,
-    status: "created"
+    order_id: order.id,
+    amount: order.amount,
+    currency: order.currency,
+    receipt: order.receipt,
+    status: order.status
   };
 }
 
@@ -48,4 +84,3 @@ export function verifyRazorpaySignature(params: {
     .digest("hex");
   return digest === params.signature;
 }
-

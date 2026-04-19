@@ -1,18 +1,42 @@
--- Rbabikerentals.com Phase 1 schema draft
+-- Rbabikerentals.com Phase 1 schema
 -- Scope: Bengaluru-only operations in Phase 1.
 
-create type role_type as enum ('customer', 'partner_investor', 'admin');
-create type kyc_status_type as enum ('not_started', 'in_progress', 'verified', 'manual_review', 'failed', 'expired');
-create type booking_status_type as enum ('draft', 'pending_kyc', 'payment_pending', 'confirmed', 'ongoing', 'extension_requested', 'extended', 'completed', 'cancelled');
+create extension if not exists "pgcrypto";
+
+do $$ begin
+  create type role_type as enum ('customer', 'partner_investor', 'admin');
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create type kyc_status_type as enum ('not_started', 'in_progress', 'verified', 'manual_review', 'failed', 'expired');
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create type booking_status_type as enum ('draft', 'pending_kyc', 'payment_pending', 'confirmed', 'ongoing', 'extension_requested', 'extended', 'completed', 'cancelled');
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create type payment_status_type as enum ('created', 'paid', 'failed', 'refunded');
+exception when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create type notification_status_type as enum ('queued', 'sent', 'failed');
+exception when duplicate_object then null;
+end $$;
 
 create table if not exists app_users (
   id text primary key,
   role role_type not null,
-  full_name text not null,
+  name text not null,
   city text not null default 'bengaluru',
   kyc_status kyc_status_type not null default 'not_started',
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  constraint app_users_city_check check (city = 'bengaluru')
 );
 
 create table if not exists vehicles (
@@ -29,7 +53,8 @@ create table if not exists vehicles (
   rate_per_week integer not null,
   rate_per_month integer not null,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  constraint vehicles_city_check check (city = 'bengaluru')
 );
 
 create table if not exists bookings (
@@ -46,17 +71,27 @@ create table if not exists bookings (
   quote jsonb not null,
   cancel_reason text,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  constraint bookings_city_check check (city = 'bengaluru'),
+  constraint bookings_window_check check (pickup_at < drop_at)
 );
+
+create index if not exists idx_bookings_vehicle_window on bookings(vehicle_id, pickup_at, drop_at);
+create index if not exists idx_bookings_status on bookings(status);
+create index if not exists idx_bookings_user on bookings(user_id);
 
 create table if not exists kyc_records (
   user_id text primary key references app_users(id),
   status kyc_status_type not null default 'not_started',
   provider text not null default 'setu_digilocker',
-  request_id text,
+  request_id text unique,
+  reference_id text,
+  consent_scopes text[] default '{}',
   aadhaar_verified boolean not null default false,
   dl_verified boolean not null default false,
+  cibil_score integer,
   needs_manual_review boolean not null default false,
+  failure_reason text,
   updated_at timestamptz not null default now()
 );
 
@@ -67,6 +102,61 @@ create table if not exists vehicle_block_windows (
   ends_at timestamptz not null,
   reason text not null,
   created_by text not null references app_users(id),
+  created_at timestamptz not null default now(),
+  constraint vehicle_block_window_check check (starts_at < ends_at)
+);
+
+create index if not exists idx_vehicle_block_window_vehicle on vehicle_block_windows(vehicle_id, starts_at, ends_at);
+
+create table if not exists damage_incidents (
+  id text primary key,
+  booking_id text not null references bookings(id),
+  vehicle_id text not null references vehicles(id),
+  reported_by text not null references app_users(id),
+  description text not null,
+  photo_urls text[] default '{}',
+  created_at timestamptz not null default now()
+);
+
+create table if not exists vehicle_documents (
+  id text primary key,
+  vehicle_id text not null references vehicles(id),
+  doc_type text not null,
+  file_url text not null,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_vehicle_documents_expiry on vehicle_documents(expires_at);
+
+create table if not exists payment_orders (
+  id text primary key,
+  booking_id text not null references bookings(id),
+  provider text not null default 'razorpay',
+  provider_order_id text not null unique,
+  amount integer not null,
+  currency text not null default 'INR',
+  status payment_status_type not null default 'created',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists payment_events (
+  id text primary key,
+  provider text not null default 'razorpay',
+  provider_event_id text not null unique,
+  payload_hash text not null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists notification_jobs (
+  id text primary key,
+  channel text not null,
+  template_key text not null,
+  recipient text not null,
+  payload jsonb not null,
+  status notification_status_type not null default 'queued',
   created_at timestamptz not null default now()
 );
 
@@ -81,31 +171,124 @@ create table if not exists audit_events (
   created_at timestamptz not null default now()
 );
 
--- RLS scaffold (Supabase)
+-- RLS
 alter table app_users enable row level security;
 alter table vehicles enable row level security;
 alter table bookings enable row level security;
 alter table kyc_records enable row level security;
 alter table vehicle_block_windows enable row level security;
+alter table damage_incidents enable row level security;
+alter table vehicle_documents enable row level security;
+alter table payment_orders enable row level security;
+alter table payment_events enable row level security;
+alter table notification_jobs enable row level security;
 alter table audit_events enable row level security;
 
--- Example policies; refine in implementation hardening:
--- Customers can read only their own bookings.
-create policy bookings_customer_select on bookings
-for select
-to authenticated
-using (user_id = auth.uid()::text);
+create or replace function app_current_user_id()
+returns text
+language sql
+stable
+as $$
+  select auth.uid()::text;
+$$;
 
--- Partners can read bookings for vehicles they own.
-create policy bookings_partner_select on bookings
-for select
-to authenticated
+create or replace function app_current_user_role()
+returns role_type
+language sql
+stable
+as $$
+  select role from app_users where id = auth.uid()::text;
+$$;
+
+drop policy if exists users_self_select on app_users;
+create policy users_self_select on app_users
+for select to authenticated
+using (id = app_current_user_id() or app_current_user_role() = 'admin');
+
+drop policy if exists vehicles_customer_partner_admin_select on vehicles;
+create policy vehicles_customer_partner_admin_select on vehicles
+for select to authenticated
 using (
-  exists (
+  app_current_user_role() in ('customer', 'admin')
+  or owner_id = app_current_user_id()
+);
+
+drop policy if exists bookings_customer_partner_admin_select on bookings;
+create policy bookings_customer_partner_admin_select on bookings
+for select to authenticated
+using (
+  user_id = app_current_user_id()
+  or app_current_user_role() = 'admin'
+  or exists (
     select 1 from vehicles v
-    where v.id = bookings.vehicle_id and v.owner_id = auth.uid()::text
+    where v.id = bookings.vehicle_id and v.owner_id = app_current_user_id()
   )
 );
 
--- All writes from server-side trusted path (service role) in Phase 1.
+drop policy if exists kyc_customer_admin_select on kyc_records;
+create policy kyc_customer_admin_select on kyc_records
+for select to authenticated
+using (user_id = app_current_user_id() or app_current_user_role() = 'admin');
+
+drop policy if exists kyc_admin_update on kyc_records;
+create policy kyc_admin_update on kyc_records
+for update to authenticated
+using (app_current_user_role() = 'admin')
+with check (app_current_user_role() = 'admin');
+
+drop policy if exists block_partner_admin_select on vehicle_block_windows;
+create policy block_partner_admin_select on vehicle_block_windows
+for select to authenticated
+using (
+  app_current_user_role() = 'admin'
+  or exists (
+    select 1 from vehicles v
+    where v.id = vehicle_block_windows.vehicle_id and v.owner_id = app_current_user_id()
+  )
+);
+
+drop policy if exists incidents_customer_partner_admin_select on damage_incidents;
+create policy incidents_customer_partner_admin_select on damage_incidents
+for select to authenticated
+using (
+  reported_by = app_current_user_id()
+  or app_current_user_role() = 'admin'
+  or exists (
+    select 1 from vehicles v
+    where v.id = damage_incidents.vehicle_id and v.owner_id = app_current_user_id()
+  )
+);
+
+drop policy if exists docs_partner_admin_select on vehicle_documents;
+create policy docs_partner_admin_select on vehicle_documents
+for select to authenticated
+using (
+  app_current_user_role() = 'admin'
+  or exists (
+    select 1 from vehicles v
+    where v.id = vehicle_documents.vehicle_id and v.owner_id = app_current_user_id()
+  )
+);
+
+drop policy if exists payment_orders_customer_partner_admin_select on payment_orders;
+create policy payment_orders_customer_partner_admin_select on payment_orders
+for select to authenticated
+using (
+  app_current_user_role() = 'admin'
+  or exists (
+    select 1 from bookings b where b.id = payment_orders.booking_id and b.user_id = app_current_user_id()
+  )
+  or exists (
+    select 1 from bookings b
+    join vehicles v on v.id = b.vehicle_id
+    where b.id = payment_orders.booking_id and v.owner_id = app_current_user_id()
+  )
+);
+
+drop policy if exists audit_admin_only_select on audit_events;
+create policy audit_admin_only_select on audit_events
+for select to authenticated
+using (app_current_user_role() = 'admin');
+
+-- Writes for domain tables are server-only in Phase 1 (service role).
 

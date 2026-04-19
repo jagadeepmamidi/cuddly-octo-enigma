@@ -75,6 +75,19 @@ export interface KycStartRequest {
   user_id: string;
 }
 
+export interface KycCallbackRequest {
+  requestId: string;
+  status?: "verified" | "failed" | "manual_review";
+  aadhaarVerified?: boolean;
+  dlVerified?: boolean;
+  cibilScore?: number | null;
+  failureReason?: string;
+}
+
+export interface KycAdminDecisionRequest {
+  reason?: string;
+}
+
 export interface ApiSuccess<T> {
   ok: true;
   data: T;
@@ -94,3 +107,11 @@ export interface ExtensionResponse {
   additional_quote: PricingQuote;
 }
 
+export interface CreatePaymentOrderRequest {
+  booking_id: string;
+}
+
+export interface ReportDamageRequest {
+  description: string;
+  photo_urls: string[];
+}

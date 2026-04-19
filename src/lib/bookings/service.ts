@@ -1,12 +1,24 @@
+import { assertCanTransition } from "@/lib/bookings/state-machine";
 import { recordAudit } from "@/lib/audit/service";
 import {
   assertBengaluruCity,
   getBookingOrThrow,
   getKycRecordOrThrow,
   getUserOrThrow,
-  getVehicleOrThrow
+  getVehicleOrThrow,
+  insertBooking,
+  insertDamageIncident,
+  insertPaymentOrder,
+  insertVehicleBlock,
+  listBookings,
+  listVehicleBlocks,
+  updateBooking
 } from "@/lib/data/repository";
-import { store } from "@/lib/data/store";
+import { createRazorpayOrder } from "@/lib/integrations/razorpay";
+import {
+  computeCancellationBreakup,
+  computePricingQuote
+} from "@/lib/pricing/engine";
 import type {
   CancelBookingRequest,
   CreateBookingRequest,
@@ -14,12 +26,13 @@ import type {
   QuoteRequest
 } from "@/lib/types/contracts";
 import type { PricingQuote, Role } from "@/lib/types/domain";
-import { assertCanTransition } from "@/lib/bookings/state-machine";
-import { computeCancellationBreakup, computePricingQuote } from "@/lib/pricing/engine";
 import { ApiException } from "@/lib/utils/errors";
 import { newId } from "@/lib/utils/ids";
 
-export function createBooking(input: CreateBookingRequest, actor: { userId: string; role: Role }) {
+export async function createBooking(
+  input: CreateBookingRequest,
+  actor: { userId: string; role: Role }
+) {
   assertBengaluruCity(input.city);
 
   if (actor.role !== "customer" && actor.role !== "admin") {
@@ -29,9 +42,9 @@ export function createBooking(input: CreateBookingRequest, actor: { userId: stri
     throw new ApiException(403, "forbidden", "Customer can create booking only for self.");
   }
 
-  const user = getUserOrThrow(input.user_id);
-  const vehicle = getVehicleOrThrow(input.vehicle_id);
-  const kyc = getKycRecordOrThrow(input.user_id);
+  const user = await getUserOrThrow(input.user_id);
+  const vehicle = await getVehicleOrThrow(input.vehicle_id);
+  const kyc = await getKycRecordOrThrow(input.user_id);
   const pickupTs = new Date(input.pickup_at).getTime();
   const dropTs = new Date(input.drop_at).getTime();
 
@@ -60,17 +73,19 @@ export function createBooking(input: CreateBookingRequest, actor: { userId: stri
     extra_helmet_count: input.extra_helmet_count,
     coupon_code: input.coupon_code
   };
-  const quote = computePricingQuote(quoteInput);
+  const quote = await computePricingQuote(quoteInput);
   const now = new Date().toISOString();
 
-  if (isVehicleBlockedDuring(input.vehicle_id, input.pickup_at, input.drop_at)) {
+  if (await isVehicleBlockedDuring(input.vehicle_id, input.pickup_at, input.drop_at)) {
     throw new ApiException(
       409,
       "vehicle_blocked",
       "Vehicle has a maintenance/block window in requested time."
     );
   }
-  if (hasVehicleBookingOverlap(input.vehicle_id, input.pickup_at, input.drop_at)) {
+  if (
+    await hasVehicleBookingOverlap(input.vehicle_id, input.pickup_at, input.drop_at)
+  ) {
     throw new ApiException(
       409,
       "vehicle_unavailable",
@@ -78,12 +93,13 @@ export function createBooking(input: CreateBookingRequest, actor: { userId: stri
     );
   }
 
-  const booking = {
+  const booking = await insertBooking({
     id: newId("booking"),
     user_id: input.user_id,
     vehicle_id: input.vehicle_id,
-    city: "bengaluru" as const,
-    status: kyc.status === "verified" ? ("payment_pending" as const) : ("pending_kyc" as const),
+    city: "bengaluru",
+    status:
+      kyc.status === "verified" ? ("payment_pending" as const) : ("pending_kyc" as const),
     pickup_at: input.pickup_at,
     drop_at: input.drop_at,
     quote,
@@ -92,11 +108,34 @@ export function createBooking(input: CreateBookingRequest, actor: { userId: stri
     km_limit_value: input.km_limit_value,
     created_at: now,
     updated_at: now
-  };
+  });
 
-  store.bookings.push(booking);
+  let paymentOrder: Awaited<ReturnType<typeof createRazorpayOrder>> | null = null;
 
-  recordAudit({
+  if (booking.status === "payment_pending") {
+    try {
+      const createdOrder = await createRazorpayOrder({
+        amountInPaise: booking.quote.total_payable * 100,
+        receipt: booking.id
+      });
+      paymentOrder = createdOrder;
+      await insertPaymentOrder({
+        id: newId("pay_order"),
+        booking_id: booking.id,
+        provider: "razorpay",
+        provider_order_id: createdOrder.order_id,
+        amount: createdOrder.amount,
+        currency: "INR",
+        status: "created",
+        created_at: now,
+        updated_at: now
+      });
+    } catch {
+      paymentOrder = null;
+    }
+  }
+
+  await recordAudit({
     actorId: actor.userId,
     actorRole: actor.role,
     action: "booking.create",
@@ -109,15 +148,18 @@ export function createBooking(input: CreateBookingRequest, actor: { userId: stri
     }
   });
 
-  return booking;
+  return {
+    ...booking,
+    payment_order: paymentOrder
+  };
 }
 
-export function extendBooking(
+export async function extendBooking(
   bookingId: string,
   input: ExtendBookingRequest,
   actor: { userId: string; role: Role }
 ) {
-  const booking = getBookingOrThrow(bookingId);
+  const booking = await getBookingOrThrow(bookingId);
   const ownerAllowed = actor.role === "customer" && booking.user_id === actor.userId;
   if (!ownerAllowed && actor.role !== "admin") {
     throw new ApiException(403, "forbidden", "Not allowed to extend this booking.");
@@ -139,7 +181,13 @@ export function extendBooking(
     );
   }
 
-  if (isVehicleBlockedDuring(booking.vehicle_id, booking.drop_at, input.requested_drop_at)) {
+  if (
+    await isVehicleBlockedDuring(
+      booking.vehicle_id,
+      booking.drop_at,
+      input.requested_drop_at
+    )
+  ) {
     throw new ApiException(
       409,
       "vehicle_blocked",
@@ -147,7 +195,7 @@ export function extendBooking(
     );
   }
   if (
-    hasVehicleBookingOverlap(
+    await hasVehicleBookingOverlap(
       booking.vehicle_id,
       booking.drop_at,
       input.requested_drop_at,
@@ -162,9 +210,8 @@ export function extendBooking(
   }
 
   assertCanTransition(booking.status, "extension_requested", "booking.extend.request");
-  booking.status = "extension_requested";
 
-  const additionalQuote = computePricingQuote({
+  const additionalQuote = await computePricingQuote({
     user_id: booking.user_id,
     vehicle_id: booking.vehicle_id,
     city: booking.city,
@@ -179,22 +226,24 @@ export function extendBooking(
   };
 
   assertCanTransition("extension_requested", "extended", "booking.extend.confirm");
-  booking.status = "extended";
-  booking.drop_at = input.requested_drop_at;
-  booking.quote = {
-    ...booking.quote,
-    base_amount: booking.quote.base_amount + extensionQuote.base_amount,
-    duration_amount: booking.quote.duration_amount + extensionQuote.duration_amount,
-    addon_amount: booking.quote.addon_amount + extensionQuote.addon_amount,
-    coupon_discount: booking.quote.coupon_discount + extensionQuote.coupon_discount,
-    tax_amount: booking.quote.tax_amount + extensionQuote.tax_amount,
-    total_payable: booking.quote.total_payable + extensionQuote.total_payable,
-    km_included: booking.quote.km_included + extensionQuote.km_included,
-    excess_km_rate: booking.quote.excess_km_rate
-  };
-  booking.updated_at = new Date().toISOString();
+  const updated = await updateBooking(booking.id, {
+    status: "extended",
+    drop_at: input.requested_drop_at,
+    quote: {
+      ...booking.quote,
+      base_amount: booking.quote.base_amount + extensionQuote.base_amount,
+      duration_amount: booking.quote.duration_amount + extensionQuote.duration_amount,
+      addon_amount: booking.quote.addon_amount + extensionQuote.addon_amount,
+      coupon_discount: booking.quote.coupon_discount + extensionQuote.coupon_discount,
+      tax_amount: booking.quote.tax_amount + extensionQuote.tax_amount,
+      total_payable: booking.quote.total_payable + extensionQuote.total_payable,
+      km_included: booking.quote.km_included + extensionQuote.km_included,
+      excess_km_rate: booking.quote.excess_km_rate
+    },
+    updated_at: new Date().toISOString()
+  });
 
-  recordAudit({
+  await recordAudit({
     actorId: actor.userId,
     actorRole: actor.role,
     action: "booking.extend",
@@ -207,18 +256,18 @@ export function extendBooking(
   });
 
   return {
-    booking_id: booking.id,
-    status: booking.status,
+    booking_id: updated.id,
+    status: updated.status,
     additional_quote: extensionQuote
   };
 }
 
-export function cancelBooking(
+export async function cancelBooking(
   bookingId: string,
   input: CancelBookingRequest,
   actor: { userId: string; role: Role }
 ) {
-  const booking = getBookingOrThrow(bookingId);
+  const booking = await getBookingOrThrow(bookingId);
   const ownerAllowed = actor.role === "customer" && booking.user_id === actor.userId;
   if (!ownerAllowed && actor.role !== "admin") {
     throw new ApiException(403, "forbidden", "Not allowed to cancel this booking.");
@@ -245,11 +294,13 @@ export function cancelBooking(
     pickupAt: booking.pickup_at
   });
 
-  booking.status = "cancelled";
-  booking.cancel_reason = input.reason;
-  booking.updated_at = new Date().toISOString();
+  const updated = await updateBooking(booking.id, {
+    status: "cancelled",
+    cancel_reason: input.reason,
+    updated_at: new Date().toISOString()
+  });
 
-  recordAudit({
+  await recordAudit({
     actorId: actor.userId,
     actorRole: actor.role,
     action: "booking.cancel",
@@ -263,31 +314,79 @@ export function cancelBooking(
   });
 
   return {
-    booking_id: booking.id,
-    status: booking.status,
+    booking_id: updated.id,
+    status: updated.status,
     cancellation_charge: breakup.cancellation_charge,
     refund_amount: breakup.refund_amount,
     charge_rate: breakup.charge_rate
   };
 }
 
-function isVehicleBlockedDuring(
+export async function reportDamageIncident(input: {
+  bookingId: string;
+  actorId: string;
+  actorRole: Role;
+  description: string;
+  photoUrls: string[];
+}) {
+  const booking = await getBookingOrThrow(input.bookingId);
+  if (
+    input.actorRole === "customer" &&
+    booking.user_id !== input.actorId
+  ) {
+    throw new ApiException(403, "forbidden", "Customer can report only own booking incident.");
+  }
+
+  const incident = await insertDamageIncident({
+    id: newId("incident"),
+    booking_id: booking.id,
+    vehicle_id: booking.vehicle_id,
+    reported_by: input.actorId,
+    description: input.description,
+    photo_urls: input.photoUrls,
+    created_at: new Date().toISOString()
+  });
+
+  // Auto-block for 24h pending review.
+  await insertVehicleBlock({
+    id: newId("block"),
+    vehicle_id: booking.vehicle_id,
+    starts_at: new Date().toISOString(),
+    ends_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    reason: "auto_block_damage_incident",
+    created_by: input.actorId,
+    created_at: new Date().toISOString()
+  });
+
+  await recordAudit({
+    actorId: input.actorId,
+    actorRole: input.actorRole,
+    action: "booking.damage_report",
+    resourceType: "booking",
+    resourceId: booking.id,
+    metadata: { incident_id: incident.id }
+  });
+
+  return incident;
+}
+
+async function isVehicleBlockedDuring(
   vehicleId: string,
   windowStart: string,
   windowEnd: string
 ) {
   const start = new Date(windowStart).getTime();
   const end = new Date(windowEnd).getTime();
+  const blocks = await listVehicleBlocks(vehicleId);
 
-  return store.vehicleBlocks.some((block) => {
-    if (block.vehicle_id !== vehicleId) return false;
+  return blocks.some((block) => {
     const blockStart = new Date(block.starts_at).getTime();
     const blockEnd = new Date(block.ends_at).getTime();
     return start < blockEnd && end > blockStart;
   });
 }
 
-function hasVehicleBookingOverlap(
+async function hasVehicleBookingOverlap(
   vehicleId: string,
   windowStart: string,
   windowEnd: string,
@@ -295,10 +394,12 @@ function hasVehicleBookingOverlap(
 ) {
   const start = new Date(windowStart).getTime();
   const end = new Date(windowEnd).getTime();
-  return store.bookings.some((booking) => {
+  const bookings = await listBookings({
+    vehicleId,
+    excludeStatuses: ["cancelled", "completed"]
+  });
+  return bookings.some((booking) => {
     if (booking.id === ignoreBookingId) return false;
-    if (booking.vehicle_id !== vehicleId) return false;
-    if (booking.status === "cancelled" || booking.status === "completed") return false;
     const bookingStart = new Date(booking.pickup_at).getTime();
     const bookingEnd = new Date(booking.drop_at).getTime();
     return start < bookingEnd && end > bookingStart;

@@ -8,13 +8,12 @@ export async function POST(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const actor = requireActor(request, ["customer", "admin"]);
+    const actor = await requireActor(request, ["customer", "admin"]);
     const body = await parseJson<CancelBookingRequest>(request);
     const { id } = await context.params;
-    const result = cancelBooking(id, body, actor);
+    const result = await cancelBooking(id, body, actor);
     return ok(result);
   } catch (error) {
     return fromError(error);
   }
 }
-

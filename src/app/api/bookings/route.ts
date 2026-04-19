@@ -5,12 +5,11 @@ import { parseJson, ok, fromError } from "@/lib/utils/http";
 
 export async function POST(request: Request) {
   try {
-    const actor = requireActor(request, ["customer", "admin"]);
+    const actor = await requireActor(request, ["customer", "admin"]);
     const body = await parseJson<CreateBookingRequest>(request);
-    const booking = createBooking(body, actor);
+    const booking = await createBooking(body, actor);
     return ok({ booking }, 201);
   } catch (error) {
     return fromError(error);
   }
 }
-

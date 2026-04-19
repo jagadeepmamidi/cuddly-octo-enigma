@@ -35,9 +35,19 @@ export default function HomePage() {
           <li>POST /api/vehicles/[id]/block</li>
           <li>GET /api/admin/bookings</li>
           <li>POST /api/admin/bookings/[id]/reject</li>
+          <li>POST /api/payments/order</li>
+          <li>POST /api/webhooks/razorpay</li>
+          <li>POST /api/kyc/digilocker/callback</li>
+          <li>GET /api/kyc/digilocker/status/[requestId]</li>
+          <li>GET /api/admin/kyc/manual-review</li>
+          <li>POST /api/admin/kyc/[userId]/approve</li>
+          <li>POST /api/admin/kyc/[userId]/reject</li>
+          <li>GET /api/customer/bookings</li>
+          <li>POST /api/bookings/[id]/damage</li>
+          <li>POST /api/internal/jobs/document-expiry</li>
+          <li>POST /api/internal/jobs/incident-escalation</li>
         </ul>
       </section>
     </main>
   );
 }
-

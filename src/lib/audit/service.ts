@@ -1,8 +1,8 @@
-import { store } from "@/lib/data/store";
+import { insertAuditEvent } from "@/lib/data/repository";
 import type { Role } from "@/lib/types/domain";
 import { newId } from "@/lib/utils/ids";
 
-export function recordAudit(params: {
+export async function recordAudit(params: {
   actorId: string;
   actorRole: Role;
   action: string;
@@ -10,7 +10,7 @@ export function recordAudit(params: {
   resourceId: string;
   metadata?: Record<string, unknown>;
 }) {
-  store.auditEvents.push({
+  await insertAuditEvent({
     id: newId("audit"),
     actor_id: params.actorId,
     actor_role: params.actorRole,
@@ -21,4 +21,3 @@ export function recordAudit(params: {
     created_at: new Date().toISOString()
   });
 }
-

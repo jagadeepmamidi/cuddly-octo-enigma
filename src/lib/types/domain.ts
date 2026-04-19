@@ -102,9 +102,13 @@ export interface KycRecord {
   status: KycStatus;
   provider: "setu_digilocker";
   request_id?: string;
+  reference_id?: string;
+  consent_scopes?: string[];
   aadhaar_verified: boolean;
   dl_verified: boolean;
+  cibil_score?: number | null;
   needs_manual_review: boolean;
+  failure_reason?: string;
   updated_at: string;
 }
 
@@ -119,3 +123,42 @@ export interface AuditEvent {
   created_at: string;
 }
 
+export interface PaymentOrder {
+  id: string;
+  booking_id: string;
+  provider: "razorpay";
+  provider_order_id: string;
+  amount: number;
+  currency: "INR";
+  status: "created" | "paid" | "failed" | "refunded";
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PaymentEvent {
+  id: string;
+  provider: "razorpay";
+  provider_event_id: string;
+  payload_hash: string;
+  created_at: string;
+}
+
+export interface VehicleDocument {
+  id: string;
+  vehicle_id: string;
+  doc_type: "rc" | "road_tax" | "permit" | "insurance" | "puc" | "service";
+  file_url: string;
+  expires_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NotificationJob {
+  id: string;
+  channel: "sms" | "whatsapp" | "email";
+  template_key: string;
+  recipient: string;
+  payload: Record<string, unknown>;
+  status: "queued" | "sent" | "failed";
+  created_at: string;
+}

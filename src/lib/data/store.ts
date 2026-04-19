@@ -3,8 +3,12 @@ import type {
   Booking,
   DamageIncident,
   KycRecord,
+  NotificationJob,
+  PaymentEvent,
+  PaymentOrder,
   User,
   Vehicle,
+  VehicleDocument,
   VehicleBlockWindow
 } from "@/lib/types/domain";
 
@@ -18,6 +22,10 @@ export const store: {
   vehicleBlocks: VehicleBlockWindow[];
   damageIncidents: DamageIncident[];
   auditEvents: AuditEvent[];
+  paymentOrders: PaymentOrder[];
+  paymentEvents: PaymentEvent[];
+  vehicleDocuments: VehicleDocument[];
+  notificationJobs: NotificationJob[];
 } = {
   users: [
     {
@@ -116,6 +124,9 @@ export const store: {
   ],
   vehicleBlocks: [],
   damageIncidents: [],
-  auditEvents: []
+  auditEvents: [],
+  paymentOrders: [],
+  paymentEvents: [],
+  vehicleDocuments: [],
+  notificationJobs: []
 };
-

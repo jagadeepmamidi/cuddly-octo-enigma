@@ -7,7 +7,7 @@ import { ApiException } from "@/lib/utils/errors";
 
 export async function POST(request: Request) {
   try {
-    const actor = requireActor(request, ["customer", "admin"]);
+    const actor = await requireActor(request, ["customer", "admin"]);
     const body = await parseJson<QuoteRequest>(request);
     assertBengaluruCity(body.city);
 
@@ -19,10 +19,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const quote = computePricingQuote(body);
+    const quote = await computePricingQuote(body);
     return ok(quote, 201);
   } catch (error) {
     return fromError(error);
   }
 }
-

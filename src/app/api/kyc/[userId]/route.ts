@@ -8,7 +8,7 @@ export async function GET(
   context: { params: Promise<{ userId: string }> }
 ) {
   try {
-    const actor = requireActor(request, ["customer", "admin"]);
+    const actor = await requireActor(request, ["customer", "admin"]);
     const { userId } = await context.params;
 
     if (actor.role === "customer" && actor.userId !== userId) {
@@ -19,10 +19,9 @@ export async function GET(
       );
     }
 
-    const kyc = getKycStatus(userId);
+    const kyc = await getKycStatus(userId);
     return ok(kyc);
   } catch (error) {
     return fromError(error);
   }
 }
-

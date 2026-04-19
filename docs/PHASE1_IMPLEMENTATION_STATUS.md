@@ -60,40 +60,53 @@ Last updated: April 19, 2026
 
 ## Pending (Next Execution Steps)
 ## 1) Auth Hardening
-- [ ] Replace header-based auth with full Better Auth session verification.
-- [ ] Add role claims in session JWT and enforce across route handlers.
+- [x] Better Auth route wired at `POST/GET /api/auth/[...all]`.
+- [x] Route protection now checks Better Auth session first.
+- [x] Role enforcement applied at API boundaries.
+- [ ] Configure production Better Auth credentials + user bootstrap migration in live environment.
 
 ## 2) Database Migration from In-Memory to Supabase
-- [ ] Implement repository layer against Supabase/Postgres tables.
-- [ ] Add migration runner and seed scripts.
-- [ ] Implement full RLS policies (customer/partner/admin granular rules).
+- [x] Async repository layer added with Supabase + memory fallback.
+- [x] Migration script added (`npm run migrate`).
+- [x] Seed script added (`npm run seed`).
+- [x] Expanded schema with RLS policy set in `db/schema.sql`.
+- [ ] Execute migration + seed on target Supabase project and validate policies with real auth users.
 
 ## 3) Payments Hardening
-- [ ] Integrate live Razorpay order creation and payment capture.
-- [ ] Implement webhook endpoint for payment success/failure and idempotency.
-- [ ] Implement deposit refund workflow and reconciliation reports.
+- [x] Razorpay live order creation integrated.
+- [x] Webhook endpoint with signature verification and event idempotency integrated.
+- [x] Booking confirmation transition on `payment.captured` implemented.
+- [ ] Deposit refund workflow automation and payout reconciliation exports.
 
 ## 4) Setu DigiLocker Hardening
-- [ ] Replace mock KYC progression with live Setu callbacks/status polling.
-- [ ] Persist request IDs, consent scopes, and document metadata.
-- [ ] Implement manual-review queue UI and admin actions.
+- [x] DigiLocker start flow integrated with provider boundary.
+- [x] Callback ingestion endpoint implemented.
+- [x] Status polling endpoint implemented.
+- [x] Request IDs/reference IDs/consent scope fields modeled.
+- [x] Admin manual-review queue + approve/reject APIs implemented.
+- [ ] Connect production Setu webhook/callback payload mapping with real field schema.
 
 ## 5) UI Implementation
-- [ ] Build production UI flows for customer booking and checkout.
-- [ ] Build partner fleet/revenue views with filters.
-- [ ] Build admin booking/KYC ops views and action controls.
+- [x] Customer dashboard flow: quote/create/list/report damage.
+- [x] Partner dashboard flow: revenue + block window action.
+- [x] Admin dashboard flow: bookings + KYC queue actions.
+- [ ] UX polish and design refinement pass for production-grade visuals.
 
 ## 6) Operational Jobs
-- [ ] Add scheduled jobs for document expiry reminders.
-- [ ] Add incident auto-block triggers and escalation notifications.
+- [x] Document expiry reminder job implemented (API + script).
+- [x] Incident escalation job implemented (API + script).
+- [x] Damage incident auto-block trigger implemented.
+- [ ] Wire jobs to scheduled runner (cron) in staging/production.
 
 ## 7) QA and Release
-- [ ] Add unit/integration tests for pricing and transitions.
-- [ ] Add API contract tests and role-access tests.
-- [ ] Deploy staging and run end-to-end UAT for Bengaluru.
+- [x] Unit tests added (state machine, pricing).
+- [x] API/role-access tests added (admin bookings, quotes).
+- [x] Typecheck/build passing locally.
+- [ ] Deploy staging and complete Bengaluru UAT sign-off with real credentials.
 
 ## Notes
 - This implementation is a strong Phase 1 backend scaffold and API baseline, not yet production-hardened.
 - Business-owner onboarding prerequisites and timelines are documented in:
   [BUSINESS_OWNER_ACCOUNT_SETUP.md](c:\Users\jagad\OneDrive\Desktop\project\docs\BUSINESS_OWNER_ACCOUNT_SETUP.md)
-
+- Staging/UAT execution checklist is documented in:
+  [STAGING_UAT_CHECKLIST.md](c:\Users\jagad\OneDrive\Desktop\project\docs\STAGING_UAT_CHECKLIST.md)

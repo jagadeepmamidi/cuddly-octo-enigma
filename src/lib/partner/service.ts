@@ -1,24 +1,21 @@
-import { store } from "@/lib/data/store";
-import { getUserOrThrow } from "@/lib/data/repository";
+import {
+  getUserOrThrow,
+  listBookings,
+  listVehicles,
+  listVehiclesByOwner
+} from "@/lib/data/repository";
 import { ApiException } from "@/lib/utils/errors";
 
-export function getPartnerRevenue(userId: string) {
-  const user = getUserOrThrow(userId);
+export async function getPartnerRevenue(userId: string) {
+  const user = await getUserOrThrow(userId);
   if (user.role !== "partner_investor" && user.role !== "admin") {
     throw new ApiException(403, "forbidden", "Only partner/investor or admin can view revenue.");
   }
 
-  const ownedVehicleIds = new Set(
-    store.vehicles
-      .filter((vehicle) =>
-        user.role === "admin" ? true : vehicle.owner_id === userId
-      )
-      .map((vehicle) => vehicle.id)
-  );
-
-  const bookings = store.bookings.filter((booking) =>
-    ownedVehicleIds.has(booking.vehicle_id)
-  );
+  const vehicles = user.role === "admin" ? await listVehicles() : await listVehiclesByOwner(userId);
+  const ownedVehicleIds = new Set(vehicles.map((vehicle) => vehicle.id));
+  const allBookings = await listBookings();
+  const bookings = allBookings.filter((booking) => ownedVehicleIds.has(booking.vehicle_id));
 
   const bookingWise = bookings.map((booking) => ({
     booking_id: booking.id,
@@ -86,4 +83,3 @@ function getWeekKey(value: string) {
   monday.setUTCDate(date.getUTCDate() + diffToMonday);
   return monday.toISOString().slice(0, 10);
 }
-
