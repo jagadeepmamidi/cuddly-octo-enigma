@@ -11,6 +11,7 @@ import type {
   PaymentOrder,
   User,
   Vehicle,
+  VehicleLiveLocation,
   VehicleBlockWindow,
   VehicleDocument
 } from "@/lib/types/domain";
@@ -30,6 +31,13 @@ export function assertBengaluruCity(city: string) {
       "Phase 1 supports only Bengaluru."
     );
   }
+}
+
+function withVehicleDefaults(vehicle: Vehicle): Vehicle {
+  return {
+    ...vehicle,
+    image_urls: vehicle.image_urls ?? []
+  };
 }
 
 export async function getUserOrThrow(userId: string): Promise<User> {
@@ -82,7 +90,7 @@ export async function getVehicleOrThrow(vehicleId: string): Promise<Vehicle> {
     if (!vehicle.is_active) {
       throw new ApiException(409, "vehicle_inactive", "Vehicle is not active.");
     }
-    return vehicle;
+    return withVehicleDefaults(vehicle);
   }
 
   const supabase = getSupabaseServiceClient();
@@ -96,12 +104,14 @@ export async function getVehicleOrThrow(vehicleId: string): Promise<Vehicle> {
   if (!data.is_active) {
     throw new ApiException(409, "vehicle_inactive", "Vehicle is not active.");
   }
-  return data as Vehicle;
+  return withVehicleDefaults(data as Vehicle);
 }
 
 export async function listVehiclesByOwner(ownerId: string): Promise<Vehicle[]> {
   if (getDataMode() === "memory") {
-    return store.vehicles.filter((item) => item.owner_id === ownerId);
+    return store.vehicles
+      .filter((item) => item.owner_id === ownerId)
+      .map(withVehicleDefaults);
   }
 
   const supabase = getSupabaseServiceClient();
@@ -110,37 +120,155 @@ export async function listVehiclesByOwner(ownerId: string): Promise<Vehicle[]> {
     .select("*")
     .eq("owner_id", ownerId);
   if (error) throw new ApiException(500, "db_error", error.message);
-  return (data ?? []) as Vehicle[];
+  return ((data ?? []) as Vehicle[]).map(withVehicleDefaults);
 }
 
 export async function listVehicles(): Promise<Vehicle[]> {
   if (getDataMode() === "memory") {
-    return store.vehicles;
+    return store.vehicles.map(withVehicleDefaults);
   }
   const supabase = getSupabaseServiceClient();
   const { data, error } = await supabase.from("vehicles").select("*");
   if (error) throw new ApiException(500, "db_error", error.message);
-  return (data ?? []) as Vehicle[];
+  return ((data ?? []) as Vehicle[]).map(withVehicleDefaults);
 }
 
 export async function upsertVehicle(vehicle: Vehicle): Promise<Vehicle> {
+  const normalized = withVehicleDefaults(vehicle);
   if (getDataMode() === "memory") {
-    const existingIndex = store.vehicles.findIndex((item) => item.id === vehicle.id);
+    const existingIndex = store.vehicles.findIndex((item) => item.id === normalized.id);
     if (existingIndex >= 0) {
-      store.vehicles[existingIndex] = vehicle;
+      store.vehicles[existingIndex] = normalized;
     } else {
-      store.vehicles.push(vehicle);
+      store.vehicles.push(normalized);
     }
-    return vehicle;
+    return normalized;
   }
   const supabase = getSupabaseServiceClient();
   const { data, error } = await supabase
     .from("vehicles")
-    .upsert(vehicle, { onConflict: "id" })
+    .upsert(normalized, { onConflict: "id" })
     .select("*")
     .single();
   if (error) throw new ApiException(500, "db_error", error.message);
-  return data as Vehicle;
+  return withVehicleDefaults(data as Vehicle);
+}
+
+export async function deleteVehicleById(vehicleId: string): Promise<Vehicle | null> {
+  if (getDataMode() === "memory") {
+    const existing = store.vehicles.find((item) => item.id === vehicleId);
+    if (!existing) return null;
+    store.vehicles = store.vehicles.filter((item) => item.id !== vehicleId);
+    store.vehicleLiveLocations = store.vehicleLiveLocations.filter(
+      (item) => item.vehicle_id !== vehicleId
+    );
+    store.vehicleBlocks = store.vehicleBlocks.filter((item) => item.vehicle_id !== vehicleId);
+    store.vehicleDocuments = store.vehicleDocuments.filter(
+      (item) => item.vehicle_id !== vehicleId
+    );
+    return withVehicleDefaults(existing);
+  }
+
+  const supabase = getSupabaseServiceClient();
+  const { error: trackingError } = await supabase
+    .from("vehicle_live_locations")
+    .delete()
+    .eq("vehicle_id", vehicleId);
+  if (trackingError) throw new ApiException(500, "db_error", trackingError.message);
+
+  const { error: blockError } = await supabase
+    .from("vehicle_block_windows")
+    .delete()
+    .eq("vehicle_id", vehicleId);
+  if (blockError) throw new ApiException(500, "db_error", blockError.message);
+
+  const { error: docsError } = await supabase
+    .from("vehicle_documents")
+    .delete()
+    .eq("vehicle_id", vehicleId);
+  if (docsError) throw new ApiException(500, "db_error", docsError.message);
+
+  const { data, error } = await supabase
+    .from("vehicles")
+    .delete()
+    .eq("id", vehicleId)
+    .select("*")
+    .maybeSingle();
+  if (error) throw new ApiException(500, "db_error", error.message);
+  return (data as Vehicle | null) ? withVehicleDefaults(data as Vehicle) : null;
+}
+
+export async function listVehicleLiveLocations(filter?: {
+  ownerId?: string;
+  vehicleIds?: string[];
+}): Promise<VehicleLiveLocation[]> {
+  if (getDataMode() === "memory") {
+    const ownerVehicleIds = filter?.ownerId
+      ? new Set(
+          store.vehicles
+            .filter((vehicle) => vehicle.owner_id === filter.ownerId)
+            .map((vehicle) => vehicle.id)
+        )
+      : null;
+    const includeIds = filter?.vehicleIds ? new Set(filter.vehicleIds) : null;
+
+    return store.vehicleLiveLocations.filter((item) => {
+      if (ownerVehicleIds && !ownerVehicleIds.has(item.vehicle_id)) return false;
+      if (includeIds && !includeIds.has(item.vehicle_id)) return false;
+      return true;
+    });
+  }
+
+  const supabase = getSupabaseServiceClient();
+  let scopedVehicleIds = filter?.vehicleIds ? [...filter.vehicleIds] : undefined;
+
+  if (filter?.ownerId) {
+    const { data: ownerVehicles, error: ownerVehiclesError } = await supabase
+      .from("vehicles")
+      .select("id")
+      .eq("owner_id", filter.ownerId);
+    if (ownerVehiclesError) {
+      throw new ApiException(500, "db_error", ownerVehiclesError.message);
+    }
+    const ownerVehicleIds = (ownerVehicles ?? []).map((item) => item.id as string);
+    if (!ownerVehicleIds.length) return [];
+    scopedVehicleIds = scopedVehicleIds
+      ? scopedVehicleIds.filter((id) => ownerVehicleIds.includes(id))
+      : ownerVehicleIds;
+  }
+
+  let query = supabase.from("vehicle_live_locations").select("*");
+  if (scopedVehicleIds?.length) query = query.in("vehicle_id", scopedVehicleIds);
+  if (scopedVehicleIds && !scopedVehicleIds.length) return [];
+
+  const { data, error } = await query;
+  if (error) throw new ApiException(500, "db_error", error.message);
+  return (data ?? []) as VehicleLiveLocation[];
+}
+
+export async function upsertVehicleLiveLocation(
+  location: VehicleLiveLocation
+): Promise<VehicleLiveLocation> {
+  if (getDataMode() === "memory") {
+    const existingIndex = store.vehicleLiveLocations.findIndex(
+      (item) => item.vehicle_id === location.vehicle_id
+    );
+    if (existingIndex >= 0) {
+      store.vehicleLiveLocations[existingIndex] = location;
+    } else {
+      store.vehicleLiveLocations.push(location);
+    }
+    return location;
+  }
+
+  const supabase = getSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("vehicle_live_locations")
+    .upsert(location, { onConflict: "vehicle_id" })
+    .select("*")
+    .single();
+  if (error) throw new ApiException(500, "db_error", error.message);
+  return data as VehicleLiveLocation;
 }
 
 export async function getKycRecordOrThrow(userId: string): Promise<KycRecord> {

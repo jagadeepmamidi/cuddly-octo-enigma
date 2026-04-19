@@ -46,12 +46,23 @@ export interface Vehicle {
   category: "scooter" | "bike" | "ev_bike";
   brand: string;
   model: string;
+  image_urls?: string[];
   is_active: boolean;
   deposit_amount: number;
   rate_per_hour: number;
   rate_per_day: number;
   rate_per_week: number;
   rate_per_month: number;
+}
+
+export interface VehicleLiveLocation {
+  vehicle_id: string;
+  latitude: number;
+  longitude: number;
+  speed_kmph?: number | null;
+  heading_deg?: number | null;
+  source: string;
+  updated_at: string;
 }
 
 export interface Booking {

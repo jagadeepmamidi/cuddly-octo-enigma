@@ -21,6 +21,7 @@ Last updated: April 19, 2026
   - `KycStatus`
   - `BookingStatus`
   - `PricingQuote`
+- [x] Vehicle live-location model added (`VehicleLiveLocation`) for map tracking.
 - [x] In-memory Bengaluru seed data added (users, vehicles, KYC).
 - [x] Booking state machine guard implemented.
 - [x] Pricing engine implemented (duration, coupon, helmet, tax, deposit, excess KM rate).
@@ -33,6 +34,7 @@ Last updated: April 19, 2026
   - get KYC status
 - [x] Partner revenue aggregation service implemented.
 - [x] Vehicle block window service implemented.
+- [x] Vehicle tracking service implemented (list + upsert for live location pings).
 - [x] Admin booking operations service implemented.
 - [x] Audit event logging service implemented.
 
@@ -44,9 +46,12 @@ Last updated: April 19, 2026
 - [x] `POST /api/kyc/digilocker/start`
 - [x] `GET /api/kyc/{userId}`
 - [x] `GET /api/partner/revenue`
+- [x] `GET /api/partner/tracking`
 - [x] `POST /api/vehicles/{id}/block`
 - [x] `GET /api/admin/bookings`
+- [x] `GET /api/admin/tracking`
 - [x] `POST /api/admin/bookings/{id}/reject`
+- [x] `POST /api/internal/tracking/update`
 
 ## 5) Security and Integration Boundaries
 - [x] Role-based request authorization via headers (`x-user-id`, `x-role`) for scaffold testing.
@@ -88,8 +93,9 @@ Last updated: April 19, 2026
 
 ## 5) UI Implementation
 - [x] Customer dashboard flow: quote/create/list/report damage.
-- [x] Partner dashboard flow: revenue + block window action.
-- [x] Admin dashboard flow: bookings + KYC queue actions.
+- [x] Partner dashboard flow: revenue + block window action + live vehicle tracking map.
+- [x] Admin dashboard flow: bookings + KYC queue actions + platform tracking map.
+- [x] Admin fleet operations UI: add/edit/deactivate/delete vehicles + image management.
 - [ ] UX polish and design refinement pass for production-grade visuals.
 
 ## 6) Operational Jobs
@@ -106,6 +112,12 @@ Last updated: April 19, 2026
 
 ## Notes
 - This implementation is a strong Phase 1 backend scaffold and API baseline, not yet production-hardened.
+- External/non-code tasks still pending before production:
+  - Set production credentials (`BETTER_AUTH_SECRET`, Supabase, Razorpay, Setu, `JOB_SECRET`).
+  - Run `npm run migrate` and `npm run seed` on the real Supabase project.
+  - Configure Razorpay webhook URL in Razorpay dashboard.
+  - Configure Setu callback/redirect URL for production.
+  - Complete staging deployment and Bengaluru UAT signoff.
 - Business-owner onboarding prerequisites and timelines are documented in:
   [BUSINESS_OWNER_ACCOUNT_SETUP.md](c:\Users\jagad\OneDrive\Desktop\project\docs\BUSINESS_OWNER_ACCOUNT_SETUP.md)
 - Staging/UAT execution checklist is documented in:

@@ -115,3 +115,46 @@ export interface ReportDamageRequest {
   description: string;
   photo_urls: string[];
 }
+
+export interface UpdateVehicleTrackingRequest {
+  vehicle_id: string;
+  latitude: number;
+  longitude: number;
+  speed_kmph?: number;
+  heading_deg?: number;
+  source?: string;
+}
+
+export interface AdminVehicleUpsertRequest {
+  owner_id: string;
+  city?: "bengaluru";
+  category: "scooter" | "bike" | "ev_bike";
+  brand: string;
+  model: string;
+  is_active?: boolean;
+  deposit_amount: number;
+  rate_per_hour: number;
+  rate_per_day: number;
+  rate_per_week: number;
+  rate_per_month: number;
+  image_urls?: string[];
+}
+
+export interface AdminVehicleUpdateRequest {
+  owner_id?: string;
+  city?: "bengaluru";
+  category?: "scooter" | "bike" | "ev_bike";
+  brand?: string;
+  model?: string;
+  is_active?: boolean;
+  deposit_amount?: number;
+  rate_per_hour?: number;
+  rate_per_day?: number;
+  rate_per_week?: number;
+  rate_per_month?: number;
+  image_urls?: string[];
+}
+
+export interface AdminVehicleImageRequest {
+  image_url: string;
+}

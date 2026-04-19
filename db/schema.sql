@@ -46,6 +46,7 @@ create table if not exists vehicles (
   category text not null,
   brand text not null,
   model text not null,
+  image_urls text[] not null default '{}',
   is_active boolean not null default true,
   deposit_amount integer not null,
   rate_per_hour integer not null,
@@ -56,6 +57,7 @@ create table if not exists vehicles (
   updated_at timestamptz not null default now(),
   constraint vehicles_city_check check (city = 'bengaluru')
 );
+alter table if exists vehicles add column if not exists image_urls text[] not null default '{}';
 
 create table if not exists bookings (
   id text primary key,
@@ -107,6 +109,22 @@ create table if not exists vehicle_block_windows (
 );
 
 create index if not exists idx_vehicle_block_window_vehicle on vehicle_block_windows(vehicle_id, starts_at, ends_at);
+
+create table if not exists vehicle_live_locations (
+  vehicle_id text primary key references vehicles(id),
+  latitude double precision not null,
+  longitude double precision not null,
+  speed_kmph double precision,
+  heading_deg double precision,
+  source text not null default 'internal_ping',
+  updated_at timestamptz not null default now(),
+  constraint vehicle_live_latitude_check check (latitude >= -90 and latitude <= 90),
+  constraint vehicle_live_longitude_check check (longitude >= -180 and longitude <= 180),
+  constraint vehicle_live_heading_check check (heading_deg is null or (heading_deg >= 0 and heading_deg < 360)),
+  constraint vehicle_live_speed_check check (speed_kmph is null or speed_kmph >= 0)
+);
+
+create index if not exists idx_vehicle_live_locations_updated_at on vehicle_live_locations(updated_at desc);
 
 create table if not exists damage_incidents (
   id text primary key,
@@ -177,6 +195,7 @@ alter table vehicles enable row level security;
 alter table bookings enable row level security;
 alter table kyc_records enable row level security;
 alter table vehicle_block_windows enable row level security;
+alter table vehicle_live_locations enable row level security;
 alter table damage_incidents enable row level security;
 alter table vehicle_documents enable row level security;
 alter table payment_orders enable row level security;
@@ -259,6 +278,17 @@ using (
   )
 );
 
+drop policy if exists tracking_partner_admin_select on vehicle_live_locations;
+create policy tracking_partner_admin_select on vehicle_live_locations
+for select to authenticated
+using (
+  app_current_user_role() = 'admin'
+  or exists (
+    select 1 from vehicles v
+    where v.id = vehicle_live_locations.vehicle_id and v.owner_id = app_current_user_id()
+  )
+);
+
 drop policy if exists docs_partner_admin_select on vehicle_documents;
 create policy docs_partner_admin_select on vehicle_documents
 for select to authenticated
@@ -291,4 +321,3 @@ for select to authenticated
 using (app_current_user_role() = 'admin');
 
 -- Writes for domain tables are server-only in Phase 1 (service role).
-

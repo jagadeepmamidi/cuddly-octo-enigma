@@ -51,19 +51,32 @@ Last updated: April 19, 2026
    - `npm run job:incidents`
 3. Validate notifications queued in `notification_jobs`.
 
-## 6) UI UAT Flows
+## 6) Live Tracking Validation
+1. Trigger vehicle GPS update ping:
+   - `POST /api/internal/tracking/update` with `x-job-secret`.
+2. Validate partner tracking visibility:
+   - `GET /api/partner/tracking` returns only partner-owned vehicles.
+3. Validate admin tracking visibility:
+   - `GET /api/admin/tracking` returns all tracked vehicles.
+4. Validate dashboard map rendering:
+   - Partner page (`/partner`) shows fleet-only map markers.
+   - Admin page (`/admin`) shows platform tracking.
+
+## 7) UI UAT Flows
 1. Customer dashboard:
    - Quote -> booking -> list bookings -> damage report.
 2. Partner dashboard:
-   - Revenue view -> block vehicle window.
+   - Revenue view -> tracking map -> block vehicle window.
 3. Admin dashboard:
+   - Fleet ops: add/edit/deactivate/delete vehicles.
+   - Fleet ops: upload/remove vehicle images.
    - View bookings -> reject booking.
    - View KYC queue -> approve/reject entries.
+   - Monitor live fleet locations.
 
-## 7) Release Sign-Off
+## 8) Release Sign-Off
 1. `npm run typecheck` passes.
 2. `npm run test` passes.
 3. `npm run build` passes.
 4. Business owner confirms payment + KYC credentials are production-approved.
 5. Bengaluru UAT approval received before production release.
-

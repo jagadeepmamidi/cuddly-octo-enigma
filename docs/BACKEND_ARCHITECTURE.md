@@ -51,11 +51,16 @@ Core principles:
 - KYC queue operations.
 - Reject/override actions and governance workflows.
 
-## 2.11 `notifications`
+## 2.11 `tracking`
+- Vehicle live location ingestion from internal jobs/webhooks/device pings.
+- Role-scoped read APIs for partner and admin dashboards.
+- GPS metadata normalization (lat/lng, heading, speed, updated timestamp).
+
+## 2.12 `notifications`
 - Template registry and provider adapter.
 - Event-driven dispatch (SMS/WhatsApp).
 
-## 2.12 `audit`
+## 2.13 `audit`
 - Immutable event log for sensitive actions.
 - Actor, resource, before/after snapshots, timestamp.
 
@@ -143,6 +148,12 @@ In Phase 1, only Bengaluru rules are active; `city` dimensions remain in schema 
 3. Notify partner/admin.
 4. Escalate to admin if expiry breaches hard compliance threshold.
 
+## 6.6 Vehicle live tracking
+1. Internal GPS source posts to `POST /api/internal/tracking/update` with `x-job-secret`.
+2. Service validates coordinates and normalizes payload.
+3. Latest position is upserted per vehicle.
+4. Partner/admin dashboards read via role-scoped tracking endpoints.
+
 ## 7. Public API Surface (Phase 1)
 - `POST /api/quotes`
 - `POST /api/bookings`
@@ -151,9 +162,17 @@ In Phase 1, only Bengaluru rules are active; `city` dimensions remain in schema 
 - `POST /api/kyc/digilocker/start`
 - `GET /api/kyc/{userId}`
 - `GET /api/partner/revenue`
+- `GET /api/partner/tracking`
 - `POST /api/vehicles/{id}/block`
 - `GET /api/admin/bookings`
+- `GET /api/admin/vehicles`
+- `POST /api/admin/vehicles`
+- `PATCH /api/admin/vehicles/{id}`
+- `DELETE /api/admin/vehicles/{id}`
+- `POST /api/admin/vehicles/{id}/images`
+- `GET /api/admin/tracking`
 - `POST /api/admin/bookings/{id}/reject`
+- `POST /api/internal/tracking/update`
 
 ## 8. Security Model
 ## 8.1 Authentication and authorization

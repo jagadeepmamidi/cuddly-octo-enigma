@@ -8,6 +8,7 @@ import type {
   PaymentOrder,
   User,
   Vehicle,
+  VehicleLiveLocation,
   VehicleDocument,
   VehicleBlockWindow
 } from "@/lib/types/domain";
@@ -20,6 +21,7 @@ export const store: {
   bookings: Booking[];
   kycRecords: KycRecord[];
   vehicleBlocks: VehicleBlockWindow[];
+  vehicleLiveLocations: VehicleLiveLocation[];
   damageIncidents: DamageIncident[];
   auditEvents: AuditEvent[];
   paymentOrders: PaymentOrder[];
@@ -65,6 +67,7 @@ export const store: {
       category: "scooter",
       brand: "Honda",
       model: "Activa 6G",
+      image_urls: ["/images/services/activa-6g.svg"],
       is_active: true,
       deposit_amount: 2000,
       rate_per_hour: 120,
@@ -79,6 +82,7 @@ export const store: {
       category: "bike",
       brand: "Yamaha",
       model: "MT-15",
+      image_urls: ["/images/services/access-125.svg"],
       is_active: true,
       deposit_amount: 3000,
       rate_per_hour: 180,
@@ -93,6 +97,7 @@ export const store: {
       category: "ev_bike",
       brand: "TVS",
       model: "iQube",
+      image_urls: ["/images/services/access-125.svg"],
       is_active: true,
       deposit_amount: 2500,
       rate_per_hour: 140,
@@ -123,6 +128,35 @@ export const store: {
     }
   ],
   vehicleBlocks: [],
+  vehicleLiveLocations: [
+    {
+      vehicle_id: "veh_001",
+      latitude: 12.9716,
+      longitude: 77.5946,
+      speed_kmph: 28,
+      heading_deg: 74,
+      source: "seed_simulator",
+      updated_at: now
+    },
+    {
+      vehicle_id: "veh_002",
+      latitude: 12.9352,
+      longitude: 77.6245,
+      speed_kmph: 42,
+      heading_deg: 112,
+      source: "seed_simulator",
+      updated_at: now
+    },
+    {
+      vehicle_id: "veh_003",
+      latitude: 12.9989,
+      longitude: 77.5926,
+      speed_kmph: 0,
+      heading_deg: 0,
+      source: "seed_simulator",
+      updated_at: now
+    }
+  ],
   damageIncidents: [],
   auditEvents: [],
   paymentOrders: [],
