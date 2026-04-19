@@ -7,12 +7,11 @@ export async function GET(
   context: { params: Promise<{ requestId: string }> }
 ) {
   try {
-    await requireActor(request, ["customer", "admin"]);
+    const actor = await requireActor(request, ["customer", "admin"]);
     const { requestId } = await context.params;
-    const result = await pollDigilockerStatus(requestId);
+    const result = await pollDigilockerStatus(requestId, actor);
     return ok(result);
   } catch (error) {
     return fromError(error);
   }
 }
-

@@ -1,6 +1,6 @@
 import type { Role } from "@/lib/types/domain";
 import { auth } from "@/lib/auth/better-auth";
-import { getUserOrThrow } from "@/lib/data/repository";
+import { getUserOrThrow, upsertUser } from "@/lib/data/repository";
 import { ApiException } from "@/lib/utils/errors";
 
 export interface ActorContext {
@@ -9,6 +9,10 @@ export interface ActorContext {
 }
 
 const validRoles: Role[] = ["customer", "partner_investor", "admin"];
+
+function isValidRole(value: unknown): value is Role {
+  return typeof value === "string" && validRoles.includes(value as Role);
+}
 
 export async function requireActor(
   request: Request,
@@ -19,6 +23,8 @@ export async function requireActor(
         user?: {
           id?: string;
           role?: Role;
+          name?: string;
+          email?: string;
         };
       }
     | null
@@ -42,12 +48,25 @@ export async function requireActor(
       const user = await getUserOrThrow(userId);
       role = user.role;
     } catch {
-      role = (session?.user as { role?: Role })?.role ?? null;
+      const sessionRole = isValidRole(session?.user?.role) ? session?.user?.role : "customer";
+      const sessionName =
+        session?.user?.name?.trim() || session?.user?.email?.trim() || userId;
+
+      const user = await upsertUser({
+        id: userId,
+        role: sessionRole,
+        name: sessionName,
+        city: "bengaluru",
+        kyc_status: "not_started"
+      });
+      role = user.role;
     }
   }
 
   if (!userId || !role) {
-    const allowDevHeaders = process.env.ALLOW_DEV_HEADERS === "true";
+    const allowDevHeaders =
+      process.env.APP_ENV !== "production" &&
+      process.env.ALLOW_DEV_HEADERS === "true";
     if (!allowDevHeaders) {
       throw new ApiException(401, "auth_required", "Authentication is required.");
     }
@@ -63,7 +82,7 @@ export async function requireActor(
     role = roleHeader as Role;
   }
 
-  if (!validRoles.includes(role)) {
+  if (!isValidRole(role)) {
     throw new ApiException(403, "invalid_role", "Invalid role.");
   }
 

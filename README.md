@@ -22,7 +22,7 @@ This repository contains a Bengaluru-only Phase 1 implementation scaffold for:
 This project is a single Next.js app (App Router + API routes), so `npm run dev` starts both UI and backend APIs together.
 
 ## Local Development Setup (Recommended)
-1. Keep `ALLOW_DEV_HEADERS=true` for local development while auth bootstrap is incomplete.
+1. Keep `ALLOW_DEV_HEADERS=false` by default. Turn it on only when you intentionally want header-based local testing without a Better Auth session.
 2. For database-backed local/staging testing, run:
    - `npm run migrate`
    - `npm run seed`
@@ -30,12 +30,16 @@ This project is a single Next.js app (App Router + API routes), so `npm run dev`
    - Customer: `cust_001`
    - Partner: `partner_001`
    - Admin: `admin_001`
+4. For local header-auth testing only, set `ALLOW_DEV_HEADERS=true` in `.env.local` and restart the dev server.
 
 ## Current Auth Model (Scaffold)
-Better Auth is wired. For local development without full auth bootstrap,
-set `ALLOW_DEV_HEADERS=true` and use request headers:
+Better Auth is wired. Session users are bootstrapped into `app_users` on first authenticated request, and KYC records are auto-created on first KYC/booking access.
+
+For local development without a Better Auth session, temporarily set `ALLOW_DEV_HEADERS=true` and use request headers:
 - `x-user-id`
 - `x-role` (`customer`, `partner_investor`, `admin`)
+
+Never enable `ALLOW_DEV_HEADERS=true` in staging or production.
 
 ## Implemented APIs
 - `POST /api/quotes`
@@ -73,6 +77,14 @@ set `ALLOW_DEV_HEADERS=true` and use request headers:
 - Seed data: `npm run seed`
 - Run document expiry job: `npm run job:documents`
 - Run incident escalation job: `npm run job:incidents`
+
+Security-sensitive environment variables to configure before staging/production:
+- `BETTER_AUTH_SECRET`
+- `BETTER_AUTH_URL`
+- `RAZORPAY_WEBHOOK_SECRET`
+- `SETU_WEBHOOK_SECRET`
+- `JOB_SECRET`
+- Supabase service credentials
 
 Vehicle image storage:
 - If Supabase is configured, uploads go to `SUPABASE_VEHICLE_IMAGE_BUCKET` (default: `vehicle-images`).
@@ -115,6 +127,7 @@ curl -X POST http://localhost:3000/api/internal/tracking/update \
 - `docs/TECH_STACK.md`
 - `docs/BACKEND_ARCHITECTURE.md`
 - `docs/PHASE1_IMPLEMENTATION_STATUS.md`
+- `docs/PRODUCTION_HARDENING.md`
 - `docs/BUSINESS_OWNER_ACCOUNT_SETUP.md`
 - `docs/STAGING_UAT_CHECKLIST.md`
 - `docs/COMPETITOR_FEATURE_GAP.md`

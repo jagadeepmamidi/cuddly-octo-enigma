@@ -5,6 +5,7 @@ Last updated: April 19, 2026
 ## 1) Environment Preparation
 1. Configure `.env` with:
    - `BETTER_AUTH_SECRET`
+   - `BETTER_AUTH_URL`
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY`
    - `SUPABASE_DB_URL`
@@ -16,8 +17,10 @@ Last updated: April 19, 2026
    - `SETU_PRODUCT_INSTANCE_ID`
    - `SETU_DIGILOCKER_BASE_URL`
    - `SETU_REDIRECT_URL`
+   - `SETU_WEBHOOK_SECRET`
    - `JOB_SECRET`
 2. Set `ALLOW_DEV_HEADERS=false` in staging.
+3. Set `APP_ENV=production` in staging-like validation environments that are meant to mirror production behavior.
 
 ## 2) Database Setup
 1. Run migration:
@@ -32,17 +35,27 @@ Last updated: April 19, 2026
 ## 3) Payment Validation
 1. Create booking in `payment_pending`.
 2. Create Razorpay order via `/api/payments/order`.
-3. Trigger webhook test event to `/api/webhooks/razorpay`.
-4. Confirm booking moves to `confirmed` on `payment.captured`.
+3. Re-hit `/api/payments/order` for the same booking and confirm the existing open order is reused.
+4. Confirm a customer cannot create a payment order for another customer booking.
+5. Trigger webhook test event to `/api/webhooks/razorpay`.
+6. Confirm booking moves to `confirmed` on `payment.captured`.
 
 ## 4) KYC Validation
 1. Start KYC: `/api/kyc/digilocker/start`.
-2. Validate callback handling: `/api/kyc/digilocker/callback`.
-3. Validate status polling: `/api/kyc/digilocker/status/[requestId]`.
-4. Validate admin queue and approve/reject:
+2. Validate callback handling: `/api/kyc/digilocker/callback` with correct `x-setu-webhook-secret`.
+3. Validate callback rejection with an invalid or missing webhook secret.
+4. Validate status polling: `/api/kyc/digilocker/status/[requestId]`.
+5. Confirm a customer cannot poll another user's KYC request.
+6. Validate admin queue and approve/reject:
    - `/api/admin/kyc/manual-review`
    - `/api/admin/kyc/[userId]/approve`
    - `/api/admin/kyc/[userId]/reject`
+
+## 4.1) Booking integrity validation
+1. Create a booking with a valid duration window for the selected plan.
+2. Attempt a booking where `duration_bucket` does not match the actual pickup/drop window and confirm API returns `400 duration_window_mismatch`.
+3. Attempt two overlapping bookings for the same vehicle and confirm one is rejected.
+4. Attempt an overlapping extension on the same vehicle and confirm it is rejected.
 
 ## 5) Operational Job Validation
 1. Run document expiry job:
@@ -79,4 +92,5 @@ Last updated: April 19, 2026
 2. `npm run test` passes.
 3. `npm run build` passes.
 4. Business owner confirms payment + KYC credentials are production-approved.
-5. Bengaluru UAT approval received before production release.
+5. `npm audit` shows no unresolved production-blocking auth/payment vulnerabilities.
+6. Bengaluru UAT approval received before production release.

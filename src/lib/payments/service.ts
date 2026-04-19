@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import {
   getBookingOrThrow,
+  getOpenPaymentOrderForBooking,
   hasProcessedPaymentEvent,
   insertPaymentEvent,
   insertPaymentOrder,
@@ -8,11 +9,42 @@ import {
   updatePaymentOrderByProviderId
 } from "@/lib/data/repository";
 import { createRazorpayOrder, verifyRazorpaySignature } from "@/lib/integrations/razorpay";
+import type { Role } from "@/lib/types/domain";
 import { ApiException } from "@/lib/utils/errors";
 import { newId } from "@/lib/utils/ids";
 
-export async function createOrderForBooking(bookingId: string) {
+function toClientOrder(params: {
+  bookingId: string;
+  providerOrderId: string;
+  amount: number;
+  currency: "INR";
+  status: string;
+}) {
+  const keyId = process.env.RAZORPAY_KEY_ID;
+  if (!keyId) {
+    throw new ApiException(500, "razorpay_env_missing", "Razorpay keys are not configured.");
+  }
+
+  return {
+    provider: "razorpay" as const,
+    key_id: keyId,
+    order_id: params.providerOrderId,
+    amount: params.amount,
+    currency: params.currency,
+    receipt: params.bookingId,
+    status: params.status
+  };
+}
+
+export async function createOrderForBooking(
+  bookingId: string,
+  actor: { userId: string; role: Role }
+) {
   const booking = await getBookingOrThrow(bookingId);
+  const ownerAllowed = actor.role === "customer" && booking.user_id === actor.userId;
+  if (!ownerAllowed && actor.role !== "admin") {
+    throw new ApiException(403, "forbidden", "Not allowed to create a payment order for this booking.");
+  }
   if (booking.status !== "payment_pending") {
     throw new ApiException(
       409,
@@ -21,22 +53,49 @@ export async function createOrderForBooking(bookingId: string) {
     );
   }
 
+  const existingOrder = await getOpenPaymentOrderForBooking(bookingId);
+  if (existingOrder) {
+    return toClientOrder({
+      bookingId,
+      providerOrderId: existingOrder.provider_order_id,
+      amount: existingOrder.amount,
+      currency: existingOrder.currency,
+      status: existingOrder.status
+    });
+  }
+
   const order = await createRazorpayOrder({
     amountInPaise: booking.quote.total_payable * 100,
     receipt: booking.id
   });
 
-  await insertPaymentOrder({
-    id: newId("pay_order"),
-    booking_id: booking.id,
-    provider: "razorpay",
-    provider_order_id: order.order_id,
-    amount: order.amount,
-    currency: order.currency,
-    status: "created",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  });
+  try {
+    await insertPaymentOrder({
+      id: newId("pay_order"),
+      booking_id: booking.id,
+      provider: "razorpay",
+      provider_order_id: order.order_id,
+      amount: order.amount,
+      currency: order.currency,
+      status: "created",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    });
+  } catch (error) {
+    if (error instanceof ApiException && error.code === "payment_order_exists") {
+      const openOrder = await getOpenPaymentOrderForBooking(bookingId);
+      if (openOrder) {
+        return toClientOrder({
+          bookingId,
+          providerOrderId: openOrder.provider_order_id,
+          amount: openOrder.amount,
+          currency: openOrder.currency,
+          status: openOrder.status
+        });
+      }
+    }
+    throw error;
+  }
 
   return order;
 }
@@ -130,4 +189,3 @@ export function verifyClientPaymentSignature(input: {
   }
   return { verified: true };
 }
-

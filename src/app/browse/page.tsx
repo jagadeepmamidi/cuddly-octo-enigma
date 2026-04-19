@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import Icon, { type IconName } from "../components/Icon";
@@ -147,7 +147,7 @@ function VehicleCard({
   );
 }
 
-export default function BrowsePage() {
+function BrowsePageContent() {
   const searchParams = useSearchParams();
   const initialDuration = mapDurationParamToRateKey(searchParams.get("duration"));
   const [category, setCategory] = useState("all");
@@ -293,5 +293,13 @@ export default function BrowsePage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function BrowsePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-white" />}>
+      <BrowsePageContent />
+    </Suspense>
   );
 }

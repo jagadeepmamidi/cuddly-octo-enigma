@@ -62,13 +62,24 @@ Last updated: April 19, 2026
   - Razorpay order/signature utilities
   - Setu DigiLocker request creation
 - [x] Postgres schema draft with RLS scaffold added: [schema.sql](c:\Users\jagad\OneDrive\Desktop\project\db\schema.sql)
+- [x] Production hardening pass completed for:
+  - Better Auth production secret enforcement
+  - default user/KYC bootstrap
+  - booking duration validation from actual timestamps
+  - payment order ownership + reuse of active orders
+  - protected DigiLocker webhook callback secret
+  - sanitized `5xx` error responses
+  - booking overlap exclusion constraint
+  - baseline HTTP security headers
 
 ## Pending (Next Execution Steps)
 ## 1) Auth Hardening
 - [x] Better Auth route wired at `POST/GET /api/auth/[...all]`.
 - [x] Route protection now checks Better Auth session first.
 - [x] Role enforcement applied at API boundaries.
-- [ ] Configure production Better Auth credentials + user bootstrap migration in live environment.
+- [x] Runtime user bootstrap added for first authenticated session.
+- [x] `better-auth` upgraded to patched release and validated with `npm audit`, tests, typecheck, and build.
+- [ ] Configure production Better Auth credentials in live environment.
 
 ## 2) Database Migration from In-Memory to Supabase
 - [x] Async repository layer added with Supabase + memory fallback.
@@ -81,7 +92,9 @@ Last updated: April 19, 2026
 - [x] Razorpay live order creation integrated.
 - [x] Webhook endpoint with signature verification and event idempotency integrated.
 - [x] Booking confirmation transition on `payment.captured` implemented.
+- [x] Payment order endpoint now enforces booking ownership and reuses an existing open order.
 - [ ] Deposit refund workflow automation and payout reconciliation exports.
+- [ ] Add first-class idempotency key support for external order creation under concurrent retries.
 
 ## 4) Setu DigiLocker Hardening
 - [x] DigiLocker start flow integrated with provider boundary.
@@ -89,6 +102,8 @@ Last updated: April 19, 2026
 - [x] Status polling endpoint implemented.
 - [x] Request IDs/reference IDs/consent scope fields modeled.
 - [x] Admin manual-review queue + approve/reject APIs implemented.
+- [x] Callback endpoint now requires a shared webhook secret.
+- [x] Status polling is now ownership-scoped for customers.
 - [ ] Connect production Setu webhook/callback payload mapping with real field schema.
 
 ## 5) UI Implementation
@@ -108,6 +123,7 @@ Last updated: April 19, 2026
 - [x] Unit tests added (state machine, pricing).
 - [x] API/role-access tests added (admin bookings, quotes).
 - [x] Typecheck/build passing locally.
+- [ ] Add automated tests for webhook spoofing, cross-user payment orders, and booking overlap races.
 - [ ] Deploy staging and complete Bengaluru UAT sign-off with real credentials.
 
 ## Notes
@@ -116,8 +132,10 @@ Last updated: April 19, 2026
   - Set production credentials (`BETTER_AUTH_SECRET`, Supabase, Razorpay, Setu, `JOB_SECRET`).
   - Run `npm run migrate` and `npm run seed` on the real Supabase project.
   - Configure Razorpay webhook URL in Razorpay dashboard.
-  - Configure Setu callback/redirect URL for production.
+  - Configure Setu callback/redirect URL and `SETU_WEBHOOK_SECRET` for production.
   - Complete staging deployment and Bengaluru UAT signoff.
+- Detailed hardening notes and future backlog are documented in:
+  [PRODUCTION_HARDENING.md](c:\Users\jagad\OneDrive\Desktop\project\docs\PRODUCTION_HARDENING.md)
 - Business-owner onboarding prerequisites and timelines are documented in:
   [BUSINESS_OWNER_ACCOUNT_SETUP.md](c:\Users\jagad\OneDrive\Desktop\project\docs\BUSINESS_OWNER_ACCOUNT_SETUP.md)
 - Staging/UAT execution checklist is documented in:

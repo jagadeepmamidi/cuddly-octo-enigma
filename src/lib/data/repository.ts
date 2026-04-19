@@ -19,6 +19,43 @@ import { ApiException } from "@/lib/utils/errors";
 
 type DataMode = "memory" | "supabase";
 
+function getDbErrorDetails(error: unknown) {
+  if (typeof error !== "object" || error === null) {
+    return { code: undefined, message: "Database request failed." };
+  }
+
+  const maybeError = error as { code?: unknown; message?: unknown };
+  return {
+    code: typeof maybeError.code === "string" ? maybeError.code : undefined,
+    message:
+      typeof maybeError.message === "string"
+        ? maybeError.message
+        : "Database request failed."
+  };
+}
+
+function throwStructuredDbError(error: unknown): never {
+  const { code, message } = getDbErrorDetails(error);
+
+  if (code === "23P01" || message.includes("bookings_vehicle_active_window_excl")) {
+    throw new ApiException(
+      409,
+      "vehicle_unavailable",
+      "Vehicle already has an active booking in the requested time window."
+    );
+  }
+
+  if (code === "23505" && message.includes("idx_payment_orders_booking_created")) {
+    throw new ApiException(
+      409,
+      "payment_order_exists",
+      "An active payment order already exists for this booking."
+    );
+  }
+
+  throw new ApiException(500, "db_error", "Database request failed.");
+}
+
 export function getDataMode(): DataMode {
   return isSupabaseConfigured() ? "supabase" : "memory";
 }
@@ -373,7 +410,7 @@ export async function insertBooking(booking: Booking): Promise<Booking> {
     .insert(booking)
     .select("*")
     .single();
-  if (error) throw new ApiException(500, "db_error", error.message);
+  if (error) throwStructuredDbError(error);
   return data as Booking;
 }
 
@@ -398,7 +435,7 @@ export async function updateBooking(
     .eq("id", bookingId)
     .select("*")
     .single();
-  if (error) throw new ApiException(500, "db_error", error.message);
+  if (error) throwStructuredDbError(error);
   return data as Booking;
 }
 
@@ -484,8 +521,31 @@ export async function insertPaymentOrder(order: PaymentOrder): Promise<PaymentOr
     .insert(order)
     .select("*")
     .single();
-  if (error) throw new ApiException(500, "db_error", error.message);
+  if (error) throwStructuredDbError(error);
   return data as PaymentOrder;
+}
+
+export async function getOpenPaymentOrderForBooking(
+  bookingId: string
+): Promise<PaymentOrder | null> {
+  if (getDataMode() === "memory") {
+    const matches = store.paymentOrders
+      .filter((item) => item.booking_id === bookingId && item.status === "created")
+      .sort((left, right) => right.created_at.localeCompare(left.created_at));
+    return matches[0] ?? null;
+  }
+
+  const supabase = getSupabaseServiceClient();
+  const { data, error } = await supabase
+    .from("payment_orders")
+    .select("*")
+    .eq("booking_id", bookingId)
+    .eq("status", "created")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throwStructuredDbError(error);
+  return (data as PaymentOrder | null) ?? null;
 }
 
 export async function updatePaymentOrderByProviderId(

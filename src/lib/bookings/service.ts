@@ -12,12 +12,14 @@ import {
   insertVehicleBlock,
   listBookings,
   listVehicleBlocks,
+  upsertKycRecord,
   updateBooking
 } from "@/lib/data/repository";
 import { createRazorpayOrder } from "@/lib/integrations/razorpay";
 import {
   computeCancellationBreakup,
-  computePricingQuote
+  computePricingQuote,
+  resolveDurationValueFromWindow
 } from "@/lib/pricing/engine";
 import type {
   CancelBookingRequest,
@@ -25,7 +27,7 @@ import type {
   ExtendBookingRequest,
   QuoteRequest
 } from "@/lib/types/contracts";
-import type { PricingQuote, Role } from "@/lib/types/domain";
+import type { KycRecord, PricingQuote, Role } from "@/lib/types/domain";
 import { ApiException } from "@/lib/utils/errors";
 import { newId } from "@/lib/utils/ids";
 
@@ -44,7 +46,23 @@ export async function createBooking(
 
   const user = await getUserOrThrow(input.user_id);
   const vehicle = await getVehicleOrThrow(input.vehicle_id);
-  const kyc = await getKycRecordOrThrow(input.user_id);
+  let kyc: KycRecord;
+  try {
+    kyc = await getKycRecordOrThrow(input.user_id);
+  } catch (error) {
+    if (!(error instanceof ApiException) || error.code !== "kyc_not_found") {
+      throw error;
+    }
+    kyc = await upsertKycRecord({
+      user_id: input.user_id,
+      status: "not_started",
+      provider: "setu_digilocker",
+      aadhaar_verified: false,
+      dl_verified: false,
+      needs_manual_review: false,
+      updated_at: new Date().toISOString()
+    });
+  }
   const pickupTs = new Date(input.pickup_at).getTime();
   const dropTs = new Date(input.drop_at).getTime();
 
@@ -64,12 +82,18 @@ export async function createBooking(
     );
   }
 
+  const resolvedDurationValue = resolveDurationValueFromWindow({
+    duration_bucket: input.duration_bucket,
+    start_at: input.pickup_at,
+    end_at: input.drop_at
+  });
+
   const quoteInput: QuoteRequest = {
     user_id: input.user_id,
     vehicle_id: input.vehicle_id,
     city: input.city,
     duration_bucket: input.duration_bucket,
-    duration_value: input.duration_value,
+    duration_value: resolvedDurationValue,
     extra_helmet_count: input.extra_helmet_count,
     coupon_code: input.coupon_code
   };
@@ -211,12 +235,18 @@ export async function extendBooking(
 
   assertCanTransition(booking.status, "extension_requested", "booking.extend.request");
 
+  const resolvedExtensionDurationValue = resolveDurationValueFromWindow({
+    duration_bucket: input.duration_bucket,
+    start_at: booking.drop_at,
+    end_at: input.requested_drop_at
+  });
+
   const additionalQuote = await computePricingQuote({
     user_id: booking.user_id,
     vehicle_id: booking.vehicle_id,
     city: booking.city,
     duration_bucket: input.duration_bucket,
-    duration_value: input.duration_value
+    duration_value: resolvedExtensionDurationValue
   });
 
   const extensionQuote: PricingQuote = {

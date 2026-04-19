@@ -22,10 +22,12 @@ export function fail(status: number, code: string, message: string) {
 
 export function fromError(error: unknown) {
   if (error instanceof ApiException) {
+    if (error.status >= 500) {
+      console.error(error);
+      return fail(error.status, error.code, "Unexpected server error.");
+    }
     return fail(error.status, error.code, error.message);
   }
-  const message =
-    error instanceof Error ? error.message : "Unexpected server error.";
-  return fail(500, "internal_error", message);
+  console.error(error);
+  return fail(500, "internal_error", "Unexpected server error.");
 }
-

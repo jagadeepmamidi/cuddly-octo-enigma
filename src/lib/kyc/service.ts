@@ -7,14 +7,50 @@ import {
   upsertKycRecord,
   upsertUser
 } from "@/lib/data/repository";
+import type { KycRecord, Role } from "@/lib/types/domain";
 import { createDigilockerRequest } from "@/lib/integrations/setu-digilocker";
 import { fetchDigilockerRequestStatus } from "@/lib/integrations/setu-digilocker";
 import { ApiException } from "@/lib/utils/errors";
 import { newId } from "@/lib/utils/ids";
 
+function resolveKycCallbackStatus(input: {
+  status?: string;
+  aadhaarVerified?: boolean;
+  dlVerified?: boolean;
+}) {
+  if (input.status === "failed") {
+    return "failed" as const;
+  }
+  if (input.status === "verified") {
+    return input.aadhaarVerified && input.dlVerified
+      ? ("verified" as const)
+      : ("manual_review" as const);
+  }
+  return "manual_review" as const;
+}
+
+async function getOrCreateKycRecord(userId: string): Promise<KycRecord> {
+  try {
+    return await getKycRecordOrThrow(userId);
+  } catch (error) {
+    if (!(error instanceof ApiException) || error.code !== "kyc_not_found") {
+      throw error;
+    }
+    return upsertKycRecord({
+      user_id: userId,
+      status: "not_started",
+      provider: "setu_digilocker",
+      aadhaar_verified: false,
+      dl_verified: false,
+      needs_manual_review: false,
+      updated_at: new Date().toISOString()
+    });
+  }
+}
+
 export async function startDigilockerKyc(userId: string) {
   const user = await getUserOrThrow(userId);
-  const kyc = await getKycRecordOrThrow(userId);
+  const kyc = await getOrCreateKycRecord(userId);
 
   let providerResponse: {
     id?: string;
@@ -81,7 +117,7 @@ export async function startDigilockerKyc(userId: string) {
 }
 
 export async function getKycStatus(userId: string) {
-  const kyc = await getKycRecordOrThrow(userId);
+  const kyc = await getOrCreateKycRecord(userId);
   return {
     user_id: userId,
     status: kyc.status,
@@ -112,13 +148,7 @@ export async function handleDigilockerCallback(input: {
     throw new ApiException(404, "kyc_not_found", "No KYC record found for requestId.");
   }
 
-  const verifiedByDocs = Boolean(input.aadhaarVerified && input.dlVerified);
-  const status =
-    input.status === "failed"
-      ? "failed"
-      : verifiedByDocs
-        ? "verified"
-        : "manual_review";
+  const status = resolveKycCallbackStatus(input);
 
   const updated = await upsertKycRecord({
     ...current,
@@ -150,6 +180,20 @@ export async function handleDigilockerCallback(input: {
   });
 
   return updated;
+}
+
+export async function getKycRequestForActor(
+  requestId: string,
+  actor: { userId: string; role: Role }
+) {
+  const record = await getKycByRequestId(requestId);
+  if (!record) {
+    throw new ApiException(404, "kyc_not_found", "No KYC record found for requestId.");
+  }
+  if (actor.role !== "admin" && record.user_id !== actor.userId) {
+    throw new ApiException(403, "forbidden", "Not allowed to access this KYC request.");
+  }
+  return record;
 }
 
 export async function markKycManualReview(userId: string, actorId: string) {
@@ -238,7 +282,11 @@ export async function listPendingKycManualReview() {
   }));
 }
 
-export async function pollDigilockerStatus(requestId: string) {
+export async function pollDigilockerStatus(
+  requestId: string,
+  actor: { userId: string; role: Role }
+) {
+  await getKycRequestForActor(requestId, actor);
   const payload = (await fetchDigilockerRequestStatus(requestId)) as {
     status?: string;
     aadhaarVerified?: boolean;

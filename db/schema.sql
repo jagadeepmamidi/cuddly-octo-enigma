@@ -2,6 +2,7 @@
 -- Scope: Bengaluru-only operations in Phase 1.
 
 create extension if not exists "pgcrypto";
+create extension if not exists btree_gist;
 
 do $$ begin
   create type role_type as enum ('customer', 'partner_investor', 'admin');
@@ -82,6 +83,20 @@ create index if not exists idx_bookings_vehicle_window on bookings(vehicle_id, p
 create index if not exists idx_bookings_status on bookings(status);
 create index if not exists idx_bookings_user on bookings(user_id);
 
+do $$ begin
+  alter table bookings
+    add constraint bookings_vehicle_active_window_excl
+    exclude using gist (
+      vehicle_id with =,
+      tstzrange(pickup_at, drop_at, '[)') with &&
+    )
+    where (
+      status <> 'cancelled'::booking_status_type
+      and status <> 'completed'::booking_status_type
+    );
+exception when duplicate_object then null;
+end $$;
+
 create table if not exists kyc_records (
   user_id text primary key references app_users(id),
   status kyc_status_type not null default 'not_started',
@@ -160,6 +175,10 @@ create table if not exists payment_orders (
   updated_at timestamptz not null default now()
 );
 
+create unique index if not exists idx_payment_orders_booking_created
+on payment_orders(booking_id)
+where status = 'created'::payment_status_type;
+
 create table if not exists payment_events (
   id text primary key,
   provider text not null default 'razorpay',
@@ -188,6 +207,8 @@ create table if not exists audit_events (
   metadata jsonb,
   created_at timestamptz not null default now()
 );
+
+alter table if exists audit_events drop constraint if exists audit_events_actor_id_fkey;
 
 -- RLS
 alter table app_users enable row level security;

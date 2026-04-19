@@ -113,15 +113,18 @@ Pricing model hierarchy:
 
 Pricing output is always materialized into `PricingQuote` and persisted as booking quote snapshot to avoid drift after configuration changes.
 In Phase 1, only Bengaluru rules are active; `city` dimensions remain in schema for future multi-city rollout.
+For booking creation and extension, the server derives billable duration from actual timestamps instead of trusting client-submitted duration counts.
 
 ## 6. Operational Flow Definitions
 ## 6.1 Booking creation + quote lock + payment/deposit
 1. Customer calls `POST /api/quotes`.
 2. Pricing service computes `PricingQuote`.
-3. Customer submits booking via `POST /api/bookings` with selected quote.
-4. Booking enters `pending_kyc` or `payment_pending` based on KYC status.
-5. Payment service creates Razorpay order.
-6. On verified success callback, status moves to `confirmed`.
+3. Customer submits booking via `POST /api/bookings`.
+4. Booking service recomputes duration from pickup/drop timestamps and refuses mismatched duration plans.
+5. Booking overlap is checked both in application logic and at the database constraint layer.
+6. Booking enters `pending_kyc` or `payment_pending` based on KYC status.
+7. Payment service creates or reuses a single active Razorpay order for that booking.
+8. On verified success callback, status moves to `confirmed`.
 
 ## 6.2 Extension and recalculation
 1. Customer calls `POST /api/bookings/{id}/extend`.
@@ -179,6 +182,8 @@ In Phase 1, only Bengaluru rules are active; `city` dimensions remain in schema 
 - Better Auth session required for all protected endpoints.
 - Role-based route authorization at API boundary.
 - Resource-level ownership checks in domain layer.
+- Header-based dev auth is disabled by default and never allowed in production mode.
+- First authenticated session bootstraps an `app_users` row when missing.
 
 ## 8.2 Supabase RLS strategy
 - Enable RLS on all exposed app tables.
@@ -193,11 +198,17 @@ In Phase 1, only Bengaluru rules are active; `city` dimensions remain in schema 
 ## 8.4 Audit and traceability
 - All admin rejects/overrides, partner block changes, and KYC decisions are audit logged.
 - Audit records immutable and queryable for incident review.
+- System-driven events such as webhook processors are allowed to write audit entries without requiring a matching human `app_users` row.
 
 ## 8.5 KYC and PII handling
 - Store only necessary KYC metadata and document references.
 - Apply retention windows and deletion/archive policy for sensitive artifacts.
 - Restrict raw document access to authorized admin workflows.
+- DigiLocker callback ingestion requires a shared webhook secret and does not auto-verify users from boolean fields alone.
+
+## 8.6 Transport and browser hardening
+- Global HTTP responses include a Content Security Policy and baseline browser security headers.
+- `5xx` responses are sanitized before being returned to clients.
 
 ## 9. Test Plan for Implementation Readiness
 ## 9.1 Completeness checks

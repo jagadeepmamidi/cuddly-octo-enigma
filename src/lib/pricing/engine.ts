@@ -1,8 +1,13 @@
 import { getVehicleOrThrow } from "@/lib/data/repository";
 import type { PricingQuote } from "@/lib/types/domain";
 import type { QuoteRequest } from "@/lib/types/contracts";
+import { ApiException } from "@/lib/utils/errors";
 
 const GST_RATE = 0.18;
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+const WEEK_MS = 7 * DAY_MS;
+const MONTH_MS = 30 * DAY_MS;
 const HELMET_RATE = {
   hour: 20,
   day: 80,
@@ -16,22 +21,79 @@ const couponRules: Record<string, number> = {
   WEEKEND15: 0.15
 };
 
+export function resolveDurationValueFromWindow(params: {
+  duration_bucket: QuoteRequest["duration_bucket"];
+  start_at: string;
+  end_at: string;
+}) {
+  const start = new Date(params.start_at).getTime();
+  const end = new Date(params.end_at).getTime();
+
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) {
+    throw new ApiException(
+      400,
+      "invalid_booking_window",
+      "Pickup time must be before drop time."
+    );
+  }
+
+  const bucketMs = {
+    hour: HOUR_MS,
+    day: DAY_MS,
+    week: WEEK_MS,
+    month: MONTH_MS
+  }[params.duration_bucket];
+
+  const durationMs = end - start;
+  if (durationMs % bucketMs !== 0) {
+    throw new ApiException(
+      400,
+      "duration_window_mismatch",
+      "Selected duration plan does not match the requested booking window."
+    );
+  }
+
+  return durationMs / bucketMs;
+}
+
 export async function computePricingQuote(input: QuoteRequest): Promise<PricingQuote> {
   const vehicle = await getVehicleOrThrow(input.vehicle_id);
   const bucket = input.duration_bucket;
   const count = input.duration_value;
+
+  if (!Number.isInteger(count) || count <= 0) {
+    throw new ApiException(
+      400,
+      "invalid_duration_value",
+      "duration_value must be a positive integer."
+    );
+  }
+  if (
+    input.extra_helmet_count !== undefined &&
+    (!Number.isInteger(input.extra_helmet_count) || input.extra_helmet_count < 0)
+  ) {
+    throw new ApiException(
+      400,
+      "invalid_extra_helmet_count",
+      "extra_helmet_count must be a non-negative integer."
+    );
+  }
 
   let baseRate = 0;
   if (bucket === "hour") baseRate = vehicle.rate_per_hour;
   if (bucket === "day") baseRate = vehicle.rate_per_day;
   if (bucket === "week") baseRate = vehicle.rate_per_week;
   if (bucket === "month") baseRate = vehicle.rate_per_month;
+  if (!baseRate) {
+    throw new ApiException(400, "invalid_duration_bucket", "Unsupported duration bucket.");
+  }
 
   const baseAmount = baseRate * count;
   const durationAmount = 0;
   const addonAmount =
     (input.extra_helmet_count ?? 0) * HELMET_RATE[bucket] * count;
-  const discountRate = input.coupon_code ? couponRules[input.coupon_code] ?? 0 : 0;
+  const normalizedCouponCode = input.coupon_code?.trim().toUpperCase();
+  const discountRate = normalizedCouponCode ? couponRules[normalizedCouponCode] ?? 0 : 0;
   const couponDiscount = Math.round((baseAmount + addonAmount) * discountRate);
   const depositAmount = vehicle.deposit_amount;
   const taxable = Math.max(0, baseAmount + durationAmount + addonAmount - couponDiscount);
