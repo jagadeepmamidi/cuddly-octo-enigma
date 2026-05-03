@@ -1,12 +1,16 @@
 # dependencies
 /node_modules
 
-# next
+# build output
 /.next
 /out
+/backend/dist
+/frontend/dist
+/.codex-logs
 
 # local env
 .env*
+!.env.example
 
 # logs
 npm-debug.log*

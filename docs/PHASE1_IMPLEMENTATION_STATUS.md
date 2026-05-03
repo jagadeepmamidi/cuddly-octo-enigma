@@ -1,6 +1,6 @@
 # Phase 1 Implementation Status (Bengaluru-Only)
 
-Last updated: April 19, 2026
+Last updated: April 26, 2026
 
 ## Completed
 ## 1) Product and Architecture Docs
@@ -10,8 +10,8 @@ Last updated: April 19, 2026
 - [x] Bengaluru-only scope clarified across docs.
 
 ## 2) App Scaffold and Project Setup
-- [x] Next.js App Router scaffold created (`src/app`).
-- [x] TypeScript + config files created (`package.json`, `tsconfig.json`, `next.config.ts`).
+- [x] MERN-style folder split created (`frontend/` React + Vite, `backend/` Node + Express).
+- [x] TypeScript + config files created (`package.json`, `tsconfig.json`, `backend/tsconfig.json`, `frontend/tsconfig.json`).
 - [x] Env template added (`.env.example`).
 - [x] Base pages for customer/partner/admin dashboard routes added.
 
@@ -74,11 +74,11 @@ Last updated: April 19, 2026
 
 ## Pending (Next Execution Steps)
 ## 1) Auth Hardening
-- [x] Better Auth route wired at `POST/GET /api/auth/[...all]`.
+- [x] Better Auth route mounted under `POST/GET /api/auth`.
 - [x] Route protection now checks Better Auth session first.
 - [x] Role enforcement applied at API boundaries.
 - [x] Runtime user bootstrap added for first authenticated session.
-- [x] `better-auth` upgraded to patched release and validated with `npm audit`, tests, typecheck, and build.
+- [x] `better-auth` upgraded to patched release and validated with tests, typecheck, and build.
 - [ ] Configure production Better Auth credentials in live environment.
 
 ## 2) Database Migration from In-Memory to Supabase

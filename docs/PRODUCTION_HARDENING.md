@@ -1,13 +1,13 @@
 # Production Hardening Notes
 
-Last updated: April 19, 2026
+Last updated: April 26, 2026
 
 This document tracks the production-safety fixes that have already been implemented in the codebase, along with the next hardening steps for future development.
 
 ## Implemented In Code
 
 ### 1. Authentication and account bootstrap
-- `better-auth` has been upgraded to `1.6.5`, and `npm audit` is clean after the dependency refresh.
+- `better-auth` has been upgraded to `1.6.5`; dependency audit should be rerun in an environment with registry access before release.
 - Better Auth now requires an explicit `BETTER_AUTH_SECRET` when `APP_ENV=production`.
 - Development header auth is disabled by default in `.env.example`.
 - Header-based auth is now allowed only when:
@@ -53,7 +53,7 @@ This document tracks the production-safety fixes that have already been implemen
 - Internal/provider/database errors are logged server-side and returned as generic `Unexpected server error.` responses.
 
 ### 7. HTTP security headers
-- Global security headers are now configured in `next.config.ts`.
+- Global security headers are now configured in Express middleware (`backend/src/http/security.ts`).
 - Added protections include:
   - Content Security Policy
   - HSTS

@@ -2,7 +2,8 @@
 
 ## 1. Decision Summary
 Phase 1 will ship as a single web application with role-segmented experiences (`customer`, `partner_investor`, `admin`) for Bengaluru operations using:
-- Next.js (App Router) for web frontend and BFF-style API routes.
+- React + Vite for the web frontend.
+- Node.js + Express for the API/backend boundary.
 - Better Auth for authentication/session handling with role claims.
 - Supabase (PostgreSQL + Storage + RLS) for core data, files, and access control.
 - Razorpay for booking payments and security deposit collection workflows.
@@ -10,11 +11,11 @@ Phase 1 will ship as a single web application with role-segmented experiences (`
 - Notification provider abstraction for WhatsApp/SMS alerts.
 
 ## 2. Stack Components
-## 2.1 Frontend: Next.js (App Router)
+## 2.1 Frontend: React + Vite
 Why:
-- Mature SSR/ISR patterns for SEO-friendly listing pages.
-- Good fit for role-based route guards in one codebase.
-- Native API routes support quick BFF integration pattern.
+- Lightweight React SPA runtime for the Phase 1 web app.
+- Fast local development with Vite and a proxy to the backend API.
+- Clear separation from backend code while retaining one repository.
 
 Phase 1 usage:
 - Public marketing and policy pages.
@@ -22,7 +23,18 @@ Phase 1 usage:
 - Booking and checkout UI.
 - Bengaluru-only location flows in Phase 1 (single-city mode).
 
-## 2.2 Auth: Better Auth + RBAC Claims
+## 2.2 Backend: Node.js + Express
+Why:
+- Keeps the backend as an explicit MERN-style server layer.
+- Preserves the existing domain services, state machine, pricing engine, and Supabase repository.
+- Provides a stable API boundary for future mobile clients or partner/admin portals.
+
+Phase 1 usage:
+- Express mounts public/protected API endpoints under `/api`.
+- Better Auth is mounted under `/api/auth`.
+- The server can serve the built frontend from `frontend/dist` in production.
+
+## 2.3 Auth: Better Auth + RBAC Claims
 Why:
 - TypeScript-first auth model.
 - Bring-your-own Postgres pattern aligns with Supabase Postgres.
@@ -33,7 +45,7 @@ Auth strategy:
 - Role claim attached to session user profile (`customer`, `partner_investor`, `admin`).
 - API authorization checks enforced server-side for all non-public endpoints.
 
-## 2.3 Data + Storage: Supabase
+## 2.4 Data + Storage: Supabase
 Why:
 - Managed Postgres with strong SQL modeling and easy migrations.
 - Storage bucket model fits KYC docs, vehicle docs, damage photos.
@@ -44,7 +56,7 @@ Usage:
 - Storage: KYC evidence references, vehicle compliance docs, incident media.
 - RLS: role and ownership enforcement.
 
-## 2.4 Payments: Razorpay
+## 2.5 Payments: Razorpay
 Why:
 - India-first payment rails (UPI/cards/wallets).
 - Fits booking checkout and deposit collection/reconciliation.
@@ -55,7 +67,7 @@ Phase 1 payments:
 - Security deposit capture/hold-style operational flow (actual implementation depends on configured Razorpay pattern and legal/accounting setup).
 - Refund support for cancellations and deposit return flows.
 
-## 2.5 KYC: Setu DigiLocker Integration
+## 2.6 KYC: Setu DigiLocker Integration
 Why:
 - Faster integration path with clean REST APIs.
 - Government-backed document retrieval and consent-first approach.
@@ -66,7 +78,7 @@ Policy:
 - Fallback: Admin manual review queue.
 - CIBIL: captured as review signal only in Phase 1, not hard auto-block.
 
-## 2.6 Notifications: Provider Abstraction
+## 2.7 Notifications: Provider Abstraction
 Why:
 - Vendor lock-in avoidance.
 - Uniform templating/event model for OTP, booking alerts, policy reminders.
@@ -79,8 +91,8 @@ Phase 1 events:
 - Insurance/document expiry reminders.
 
 ## 3. Architecture Style
-- Monorepo-friendly modular web app and API.
-- BFF + domain service modules in the same deployment.
+- Monorepo with separate `frontend/` and `backend/` folders.
+- Express API + domain service modules in the backend deployment.
 - Relational source of truth (Postgres) with explicit state transitions.
 - Event-triggered notification dispatch from domain events.
 - City-aware schema (`city_id`) retained for future expansion, seeded with Bengaluru only in Phase 1.

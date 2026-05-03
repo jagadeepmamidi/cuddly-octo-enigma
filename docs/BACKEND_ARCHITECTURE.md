@@ -1,7 +1,7 @@
 # Rbabikerentals.com Backend Architecture (Phase 1)
 
 ## 1. Architecture Overview
-Backend follows a modular monolith/BFF architecture inside one Next.js-based deployment with Supabase as data platform.  
+Backend follows a modular monolith API architecture in a Node.js/Express deployment with Supabase as the data platform.  
 Core principles:
 - Clear domain boundaries.
 - Explicit booking state machine.

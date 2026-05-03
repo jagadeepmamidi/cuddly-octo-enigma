@@ -6,8 +6,10 @@ This repository contains a Bengaluru-only Phase 1 implementation scaffold for:
 - Admin operations
 
 ## Tech Direction
-- Next.js (App Router)
-- Better Auth session integration (`/api/auth/[...all]`)
+- MERN-style split application:
+  - `frontend/`: Vite + React single-page app
+  - `backend/`: Node.js + Express API server
+- Better Auth session integration mounted at `/api/auth`
 - Supabase repository support + schema (`db/schema.sql`)
 - Razorpay order + webhook flow
 - Setu DigiLocker start/callback/status flow
@@ -17,9 +19,12 @@ This repository contains a Bengaluru-only Phase 1 implementation scaffold for:
 2. Fill required values (for pure local scaffold use dummy provider credentials, but keep valid Supabase vars if you want DB mode).
 3. Install dependencies: `npm install`
 4. Start app: `npm run dev`
-5. Open `http://localhost:3000`
+5. Open `http://localhost:3000` for the frontend and `http://localhost:4000/api/health` for backend health.
 
-This project is a single Next.js app (App Router + API routes), so `npm run dev` starts both UI and backend APIs together.
+If port `3000` is already busy, run the frontend manually on another port:
+```bash
+npx vite --config frontend/vite.config.ts --port 3001
+```
 
 ## Local Development Setup (Recommended)
 1. Keep `ALLOW_DEV_HEADERS=false` by default. Turn it on only when you intentionally want header-based local testing without a Better Auth session.
@@ -85,6 +90,10 @@ Security-sensitive environment variables to configure before staging/production:
 - `SETU_WEBHOOK_SECRET`
 - `JOB_SECRET`
 - Supabase service credentials
+
+Runtime ports:
+- `BACKEND_PORT` or `PORT`: backend port, default `4000`
+- `FRONTEND_ORIGIN`: allowed frontend origin for CORS, default `http://localhost:3000`
 
 Vehicle image storage:
 - If Supabase is configured, uploads go to `SUPABASE_VEHICLE_IMAGE_BUCKET` (default: `vehicle-images`).

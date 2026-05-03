@@ -107,10 +107,26 @@ create table if not exists kyc_records (
   aadhaar_verified boolean not null default false,
   dl_verified boolean not null default false,
   cibil_score integer,
+  cibil_risk_level text,
   needs_manual_review boolean not null default false,
   failure_reason text,
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  constraint kyc_cibil_score_check check (cibil_score is null or (cibil_score >= 300 and cibil_score <= 900)),
+  constraint kyc_cibil_risk_level_check check (cibil_risk_level is null or cibil_risk_level in ('low', 'medium', 'high'))
 );
+alter table if exists kyc_records add column if not exists cibil_risk_level text;
+do $$ begin
+  alter table kyc_records
+    add constraint kyc_cibil_score_check
+    check (cibil_score is null or (cibil_score >= 300 and cibil_score <= 900));
+exception when duplicate_object then null;
+end $$;
+do $$ begin
+  alter table kyc_records
+    add constraint kyc_cibil_risk_level_check
+    check (cibil_risk_level is null or cibil_risk_level in ('low', 'medium', 'high'));
+exception when duplicate_object then null;
+end $$;
 
 create table if not exists vehicle_block_windows (
   id text primary key,
@@ -168,12 +184,18 @@ create table if not exists payment_orders (
   booking_id text not null references bookings(id),
   provider text not null default 'razorpay',
   provider_order_id text not null unique,
+  provider_payment_id text,
+  provider_refund_id text,
   amount integer not null,
+  refunded_amount integer,
   currency text not null default 'INR',
   status payment_status_type not null default 'created',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table if exists payment_orders add column if not exists provider_payment_id text;
+alter table if exists payment_orders add column if not exists provider_refund_id text;
+alter table if exists payment_orders add column if not exists refunded_amount integer;
 
 create unique index if not exists idx_payment_orders_booking_created
 on payment_orders(booking_id)
