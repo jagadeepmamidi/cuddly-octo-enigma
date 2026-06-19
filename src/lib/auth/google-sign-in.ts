@@ -1,6 +1,6 @@
 import { authClient } from "@/lib/auth/auth-client";
 
-export const isGoogleAuthEnabled = Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID);
+export const isGoogleAuthEnabled = Boolean(process.env.GOOGLE_CLIENT_ID);
 
 export async function startGoogleSignIn(callbackURL: string) {
   const { data, error } = await authClient.signIn.social({

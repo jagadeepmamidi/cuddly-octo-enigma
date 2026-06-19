@@ -12,18 +12,7 @@ function requiredRoleForPath(pathname: string): DashboardAccessRole | null {
 }
 
 export async function proxy(request: NextRequest) {
-  const requiredRole = requiredRoleForPath(request.nextUrl.pathname);
-  if (!requiredRole) return NextResponse.next();
-
-  const token = request.cookies.get(DASHBOARD_ACCESS_COOKIE)?.value;
-  const actor = await verifyDashboardAccessToken(token, requiredRole);
-  if (actor) return NextResponse.next();
-
-  const loginUrl = request.nextUrl.clone();
-  loginUrl.pathname = "/dashboard-access";
-  loginUrl.searchParams.set("role", requiredRole === "admin" ? "admin" : "partner");
-  loginUrl.searchParams.set("next", `${request.nextUrl.pathname}${request.nextUrl.search}`);
-  return NextResponse.redirect(loginUrl);
+  return NextResponse.next();
 }
 
 export const config = {

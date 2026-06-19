@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
+import { emailOTP } from "better-auth/plugins";
 import { Pool } from "pg";
-import { sendResetPasswordEmail } from "@/lib/notifications/service";
+import { sendResetPasswordEmail, sendOtpEmail } from "@/lib/notifications/service";
 import { getServerAppBaseUrl } from "@/lib/utils/app-url";
 
 const dbUrl = process.env.SUPABASE_DB_URL ?? process.env.DATABASE_URL;
@@ -30,10 +31,18 @@ export const auth = betterAuth({
     : undefined,
   emailAndPassword: {
     enabled: true,
+    requireEmailVerification: true,
     sendResetPassword: async ({ user, url, token }, request) => {
       await sendResetPasswordEmail(user.email, url);
     }
   },
+  plugins: [
+    emailOTP({
+      async sendVerificationOTP({ email, otp, type }, request) {
+        await sendOtpEmail(email, otp);
+      }
+    })
+  ],
   socialProviders:
     googleClientId && googleClientSecret
       ? {

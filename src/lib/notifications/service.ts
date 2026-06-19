@@ -79,6 +79,18 @@ export async function sendResetPasswordEmail(email: string, resetLink: string) {
   });
 }
 
+export async function sendOtpEmail(email: string, otp: string) {
+  const text = `Hi there,\n\nYour verification code is: ${otp}\n\nThis code will expire shortly. Please enter it to verify your email address.\n\nThanks,\nRBA Bike Rentals Team`;
+  const html = `<p>Hi there,</p><p>Your verification code is: <strong style="font-size:24px;letter-spacing:4px;padding:10px;background:#f5f5f5;border-radius:4px;display:inline-block;margin:10px 0;">${otp}</strong></p><p>This code will expire shortly. Please enter it to verify your email address.</p><p>Thanks,<br>RBA Bike Rentals Team</p>`;
+
+  await sendEmail({
+    to: email,
+    subject: "Verify your email address - RBA Bike Rentals",
+    text,
+    html
+  });
+}
+
 export async function sendBookingConfirmationEmail(email: string, bookingDetails: any) {
   const pickupTime = new Date(bookingDetails.pickup_at).toLocaleString();
   const dropTime = new Date(bookingDetails.drop_at).toLocaleString();

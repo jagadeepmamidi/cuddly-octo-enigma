@@ -16,8 +16,7 @@ const FOOTER_LINKS = {
     { label: "FAQ", href: "#" }
   ],
   Partner: [
-    { label: "Partner Login", href: "/dashboard-access?role=partner" },
-    { label: "Admin Login", href: "/dashboard-access?role=admin" }
+    { label: "Staff Access", href: "/staff-login" }
   ]
 };
 

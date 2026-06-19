@@ -159,12 +159,9 @@ function LoginForm() {
             <Icon name="settings" className="h-4 w-4" />
             Staff dashboard access
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <Link href="/dashboard-access?role=admin" className="btn-secondary text-center text-xs py-2 block">
-              Admin Login
-            </Link>
-            <Link href="/dashboard-access?role=partner" className="btn-secondary text-center text-xs py-2 block">
-              Partner Login
+          <div className="grid grid-cols-1">
+            <Link href="/staff-login" className="btn-secondary text-center text-xs py-2 block">
+              Staff Access (Admin / Partner)
             </Link>
           </div>
         </div>

@@ -39,6 +39,9 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  env: {
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || "",
+  },
   turbopack: {
     root: path.resolve(__dirname),
   },
