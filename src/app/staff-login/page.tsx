@@ -87,13 +87,7 @@ function StaffLoginForm() {
       setError(error.message || "Invalid or expired OTP. Please try again.");
       setLoading(false);
     } else {
-      const { error: signInError } = await authClient.signIn.email({ email, password });
-      if (signInError) {
-        setError("Verified successfully, but failed to automatically log in. Please reload the page to log in.");
-        setLoading(false);
-      } else {
-        router.push(role === "admin" ? "/admin" : "/partner");
-      }
+      router.push(role === "admin" ? "/admin" : "/partner");
     }
   };
 

@@ -53,6 +53,15 @@ export async function sendEmail({
   }
 
   try {
+    // In development, always log the email so we can see OTPs easily even if SMTP fails
+    if (process.env.NODE_ENV === "development") {
+      console.log("========== EMAIL DEV LOG ==========");
+      console.log(`To: ${to}`);
+      console.log(`Subject: ${subject}`);
+      console.log(`Body (Text): \n${text}`);
+      console.log("===================================");
+    }
+
     const info = await transporter.sendMail({
       from,
       to,
@@ -62,8 +71,12 @@ export async function sendEmail({
     });
     console.log(`Email sent: ${info.messageId}`);
   } catch (error) {
-    console.error("Error sending email:", error);
-    throw error;
+    console.error("Error sending email via SMTP:", error);
+    // We don't throw the error in development so it doesn't crash background tasks,
+    // allowing the user to still use the OTP printed in the console.
+    if (process.env.NODE_ENV !== "development") {
+      throw error;
+    }
   }
 }
 

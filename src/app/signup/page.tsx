@@ -66,20 +66,14 @@ export default function SignUpPage() {
     setLoading(true);
     setError("");
 
-    const { error } = await authClient.emailOtp.verifyEmail({ email, otp });
+    const { error, data } = await authClient.emailOtp.verifyEmail({ email, otp });
     
     if (error) {
       setError(error.message || "Invalid or expired OTP. Please try again.");
       setLoading(false);
     } else {
-      // Successfully verified. We should now log the user in.
-      const { error: signInError } = await authClient.signIn.email({ email, password });
-      if (signInError) {
-        setError("Verified successfully, but failed to automatically log in. Please return to the login page.");
-        setLoading(false);
-      } else {
-        router.push("/profile");
-      }
+      // Successfully verified and automatically logged in by Better Auth!
+      router.push("/profile");
     }
   };
 
